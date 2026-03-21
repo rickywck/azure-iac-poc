@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "eastus" },
+    "resourceNamePrefix": { "value": "agenticpocdev" },
+    "postgresAdminUsername": { "value": "pocadmin" },
+    "postgresDatabaseName": { "value": "agentdb" },
+    "postgresSku": { "value": "B_Burstable_B1ms" },
+    "postgresVersion": { "value": "15" },
+    "storageContainerName": { "value": "agent-data" },
+    "acrSku": { "value": "Standard" },
+    "uiImage": { "value": "ui:latest" },
+    "backendImage": { "value": "backend:latest" },
+    "agentsImage": { "value": "agents:latest" }
+  }
+}
