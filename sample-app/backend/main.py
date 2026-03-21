@@ -26,8 +26,11 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
-app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+from .routers.tasks import router as tasks_router
+from .routers.agent import router as agent_router
+
+app.include_router(tasks_router, prefix="/api/tasks", tags=["tasks"])
+app.include_router(agent_router, prefix="/api/agent", tags=["agent"])
 
 @app.on_event("startup")
 async def startup_event():
