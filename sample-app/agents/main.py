@@ -1,0 +1,46 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+import os
+
+from agent import get_agent
+
+app = FastAPI(
+    title="Agentic POC Agents Service",
+    description="LangChain agents service for the Agentic POC",
+    version="0.1.0"
+)
+
+# CORS middleware - allow calls from backend service
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For POC - restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+
+class ChatResponse(BaseModel):
+    message: str
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "agents"}
+
+@app.post("/agent", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """Process a chat message using the LangChain agent."""
+    agent = get_agent()
+    response = await agent.chat(request.message)
+    return ChatResponse(message=response)
+
+@app.get("/")
+async def root():
+    return {
+        "message": "Agentic POC Agents Service",
+        "version": "0.1.0",
+        "model": os.getenv("FOUNDRY_MODEL", "gpt-4mini")
+    }
