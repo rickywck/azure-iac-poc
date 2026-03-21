@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(az bicep:*)",
+      "Bash(chmod:*)",
+      "Bash(bash -n /c/users/ricky/poc/azure-iac/.worktrees/agentic-poc/scripts/deploy.sh)",
+      "Bash(bash -n /c/users/ricky/poc/azure-iac/.worktrees/agentic-poc/scripts/validate.sh)",
+      "Bash(wc:*)",
+      "Bash(npm install:*)",
+      "Bash(python -m py_compile sample-app/backend/main.py)",
+      "Bash(python -m py_compile sample-app/backend/routers/tasks.py)",
+      "Bash(python -m py_compile sample-app/backend/routers/agent.py)",
+      "Bash(python -m py_compile sample-app/backend/database.py)",
+      "Bash(python -m py_compile sample-app/backend/models.py)"
+    ]
+  }
+}
