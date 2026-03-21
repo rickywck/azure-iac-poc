@@ -1,0 +1,30 @@
+# Worktrees
+.worktrees/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log*
+dist/
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+*.env
+secrets.*
+
+# OS
+.DS_Store
+Thumbs.db
