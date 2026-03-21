@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException
 import httpx
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ..models import ChatRequest, ChatResponse
+from models import ChatRequest, ChatResponse
 
 router = APIRouter()
 

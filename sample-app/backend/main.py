@@ -6,9 +6,9 @@ from typing import List
 from pydantic import BaseModel
 import os
 
-from .database import get_db, init_db, TaskDB
-from .models import Task, TaskCreate, TaskUpdate
-from .routers import tasks, agent
+from database import get_db, init_db, TaskDB
+from models import Task, TaskCreate, TaskUpdate
+from routers import tasks, agent
 
 app = FastAPI(
     title="Agentic POC Backend",
@@ -26,8 +26,8 @@ app.add_middleware(
 )
 
 # Include routers
-from .routers.tasks import router as tasks_router
-from .routers.agent import router as agent_router
+from routers.tasks import router as tasks_router
+from routers.agent import router as agent_router
 
 app.include_router(tasks_router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(agent_router, prefix="/api/agent", tags=["agent"])

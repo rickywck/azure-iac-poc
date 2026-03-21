@@ -2,9 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ..database import get_db, TaskDB
-from ..models import Task, TaskCreate, TaskUpdate
+from database import get_db, TaskDB
+from models import Task, TaskCreate, TaskUpdate
 
 router = APIRouter()
 
