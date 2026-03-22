@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "9160187024271449823"
+      "templateHash": "17515628622765118646"
     }
   },
   "parameters": {
@@ -78,10 +78,16 @@
         "description": "PostgreSQL username"
       }
     },
-    "postgresPassword": {
-      "type": "securestring",
+    "keyVaultUrl": {
+      "type": "string",
       "metadata": {
-        "description": "PostgreSQL password"
+        "description": "Key Vault URL"
+      }
+    },
+    "postgresPasswordSecretName": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault secret name for the PostgreSQL password"
       }
     },
     "storageAccountName": {
@@ -224,10 +230,6 @@
               "value": "[parameters('acrPassword')]"
             },
             {
-              "name": "postgres-password",
-              "value": "[parameters('postgresPassword')]"
-            },
-            {
               "name": "storage-key",
               "value": "[parameters('storageAccountKey')]"
             },
@@ -313,12 +315,20 @@
                   "value": "[parameters('postgresUsername')]"
                 },
                 {
-                  "name": "POSTGRES_PASSWORD",
-                  "secretRef": "postgres-password"
-                },
-                {
                   "name": "POSTGRES_SSLMODE",
                   "value": "require"
+                },
+                {
+                  "name": "KEY_VAULT_URL",
+                  "value": "[parameters('keyVaultUrl')]"
+                },
+                {
+                  "name": "POSTGRES_PASSWORD_SECRET_NAME",
+                  "value": "[parameters('postgresPasswordSecretName')]"
+                },
+                {
+                  "name": "AZURE_CLIENT_ID",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('containerAppUIName'))), '2023-01-31').clientId]"
                 },
                 {
                   "name": "AGENT_SERVICE_URL",
@@ -420,10 +430,6 @@
             {
               "name": "acr-password",
               "value": "[parameters('acrPassword')]"
-            },
-            {
-              "name": "postgres-password",
-              "value": "[parameters('postgresPassword')]"
             },
             {
               "name": "storage-key",

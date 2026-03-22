@@ -36,9 +36,11 @@ param postgresDatabase string
 @description('PostgreSQL username')
 param postgresUsername string
 
-@description('PostgreSQL password')
-@secure()
-param postgresPassword string
+@description('Key Vault URL')
+param keyVaultUrl string
+
+@description('Key Vault secret name for the PostgreSQL password')
+param postgresPasswordSecretName string
 
 @description('Storage account name')
 param storageAccountName string
@@ -140,10 +142,6 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
           value: acrPassword
         }
         {
-          name: 'postgres-password'
-          value: postgresPassword
-        }
-        {
           name: 'storage-key'
           value: storageAccountKey
         }
@@ -231,12 +229,20 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
               value: postgresUsername
             }
             {
-              name: 'POSTGRES_PASSWORD'
-              secretRef: 'postgres-password'
-            }
-            {
               name: 'POSTGRES_SSLMODE'
               value: 'require'
+            }
+            {
+              name: 'KEY_VAULT_URL'
+              value: keyVaultUrl
+            }
+            {
+              name: 'POSTGRES_PASSWORD_SECRET_NAME'
+              value: postgresPasswordSecretName
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: containerAppUIIdentity.properties.clientId
             }
             {
               name: 'AGENT_SERVICE_URL'
@@ -333,10 +339,6 @@ resource containerAppAgents 'Microsoft.App/containerApps@2023-05-01' = {
         {
           name: 'acr-password'
           value: acrPassword
-        }
-        {
-          name: 'postgres-password'
-          value: postgresPassword
         }
         {
           name: 'storage-key'

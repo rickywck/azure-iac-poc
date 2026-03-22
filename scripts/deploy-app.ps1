@@ -48,9 +48,6 @@ Write-Host "Location: $Location"
 Write-Host "ACR: $acrName"
 Write-Host ""
 
-$postgresPassword = Read-Host "Enter PostgreSQL admin password" -AsSecureString
-$postgresPasswordPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($postgresPassword))
-
 $deployFoundry = $true
 $foundryApiKeyPlain = ""
 $foundryEndpoint = ""
@@ -131,8 +128,8 @@ $deployOutput = az deployment group create `
                  backendImage="$backendImage" `
                  agentsImage="$agentsImage" `
                  foundryModel="$foundryModel" `
+                 postgresPasswordSecretName="postgres-admin-password" `
                  deployFoundry="$deployFoundry" `
-                 postgresAdminPassword="$postgresPasswordPlain" `
                  foundryApiKey="$foundryApiKeyPlain" `
                  foundryEndpoint="$foundryEndpoint" `
     --output json
@@ -156,6 +153,11 @@ Write-Host "Container Apps:" -ForegroundColor Cyan
 Write-Host "  UI+Backend URL: https://$($outputs.uiAppURL.value)"
 Write-Host "  Agents internal FQDN: $($outputs.agentsInternalFqdn.value)"
 Write-Host "  Note: Agents ingress is internal only and is not browser-accessible." -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "Key Vault:" -ForegroundColor Cyan
+Write-Host "  Name: $($outputs.keyVaultName.value)"
+Write-Host "  URL: $($outputs.keyVaultUrl.value)"
+Write-Host "  PostgreSQL password secret: $($outputs.postgresCredentialName.value)"
 Write-Host ""
 Write-Host "Foundry:" -ForegroundColor Cyan
 Write-Host "  Account: $($outputs.foundryAccountName.value)"

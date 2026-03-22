@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "15554772894826503496"
+      "templateHash": "9939125487046979843"
     }
   },
   "parameters": {
@@ -27,10 +27,10 @@
         "description": "Storage account name"
       }
     },
-    "resourceGroupName": {
+    "keyVaultName": {
       "type": "string",
       "metadata": {
-        "description": "Resource group name"
+        "description": "Key Vault name"
       }
     }
   },
@@ -53,6 +53,16 @@
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
         "principalId": "[parameters('containerAppAgentsIdentityId')]"
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2020-04-01-preview",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+      "name": "[guid(parameters('containerAppUIIdentityId'), resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'key-vault-secrets-user')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+        "principalId": "[parameters('containerAppUIIdentityId')]"
       }
     }
   ]

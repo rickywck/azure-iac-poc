@@ -1,11 +1,73 @@
 # Setup local development environment
-# Run: .\scripts\setup-local-env.ps1 -ResourceGroup rg-agentic-poc-dev -PostgresPassword "YourPassword"
+# Run: .\scripts\setup-local-env.ps1 -ResourceGroup rg-agentic-poc-dev
 
 param(
     [string]$ResourceGroup = "rg-agentic-poc-dev",
     [string]$Location = "eastus2",
-    [string]$PostgresPassword = ""
+    [switch]$SkipPostgresFirewallRule
 )
+
+function Get-PublicIpAddress {
+    $endpoints = @(
+        'https://api.ipify.org',
+        'https://ifconfig.me/ip'
+    )
+
+    foreach ($endpoint in $endpoints) {
+        try {
+            $result = Invoke-RestMethod -Uri $endpoint -Method Get -TimeoutSec 10
+            if (-not [string]::IsNullOrWhiteSpace($result)) {
+                return ([string]$result).Trim()
+            }
+        } catch {
+        }
+    }
+
+    return ''
+}
+
+function Ensure-PostgresFirewallRule {
+    param(
+        [string]$ResourceGroup,
+        [string]$ServerName,
+        [string]$RuleName,
+        [string]$PublicIp
+    )
+
+    $currentSyntaxOutput = az postgres flexible-server firewall-rule create `
+        --resource-group $ResourceGroup `
+        --name $ServerName `
+        --rule-name $RuleName `
+        --start-ip-address $PublicIp `
+        --end-ip-address $PublicIp `
+        --output none 2>&1
+
+    if ($LASTEXITCODE -eq 0) {
+        return $true
+    }
+
+    $futureSyntaxOutput = az postgres flexible-server firewall-rule create `
+        --resource-group $ResourceGroup `
+        --name $RuleName `
+        --server-name $ServerName `
+        --start-ip-address $PublicIp `
+        --end-ip-address $PublicIp `
+        --output none 2>&1
+
+    if ($LASTEXITCODE -eq 0) {
+        return $true
+    }
+
+    if ($currentSyntaxOutput) {
+        Write-Verbose ($currentSyntaxOutput | Out-String)
+    }
+
+    if ($futureSyntaxOutput) {
+        Write-Verbose ($futureSyntaxOutput | Out-String)
+    }
+
+    return $false
+}
 
 Write-Host "=== Setting up local development environment ===" -ForegroundColor Cyan
 Write-Host "Resource Group: $ResourceGroup"
@@ -36,6 +98,8 @@ $outputs = $deployment.outputs
 $parameters = $deployment.parameters
 
 $postgresHost = $outputs.postgresHost.value
+$keyVaultName = $outputs.keyVaultName.value
+$postgresPasswordSecretName = $outputs.postgresCredentialName.value
 $foundryEndpoint = $outputs.foundryEndpoint.value
 $foundryAccountName = $outputs.foundryAccountName.value
 $storageAccountName = $outputs.storageAccountName.value
@@ -47,11 +111,39 @@ $postgresDb = $parameters.postgresDatabaseName.value
 Write-Host "Deployment details retrieved." -ForegroundColor Green
 Write-Host ""
 
-# Get PostgreSQL password
-if ([string]::IsNullOrWhiteSpace($PostgresPassword)) {
-    $securePassword = Read-Host "Enter PostgreSQL admin password" -AsSecureString
-    $PostgresPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword))
+$postgresServerName = $postgresHost.Split('.')[0]
+
+if (-not $SkipPostgresFirewallRule) {
+    Write-Host "Ensuring PostgreSQL firewall access for the current client IP..." -ForegroundColor Yellow
+    $publicIp = Get-PublicIpAddress
+
+    if ([string]::IsNullOrWhiteSpace($publicIp)) {
+        Write-Warning "Could not determine the current public IP address. Local PostgreSQL access may fail unless you add a firewall rule manually."
+    } else {
+        if (Ensure-PostgresFirewallRule -ResourceGroup $ResourceGroup -ServerName $postgresServerName -RuleName 'local-dev-client' -PublicIp $publicIp) {
+            Write-Host "PostgreSQL firewall rule 'local-dev-client' now allows $publicIp." -ForegroundColor Green
+        } else {
+            Write-Warning "Failed to create the PostgreSQL firewall rule for $publicIp. Local PostgreSQL access may fail."
+        }
+    }
+
+    Write-Host ""
 }
+
+# Get PostgreSQL password from Key Vault
+Write-Host "Retrieving PostgreSQL password from Key Vault..." -ForegroundColor Yellow
+$PostgresPassword = az keyvault secret show `
+    --vault-name $keyVaultName `
+    --name $postgresPasswordSecretName `
+    --query "value" `
+    --output tsv 2>$null
+
+if (-not $PostgresPassword) {
+    Write-Error "Failed to retrieve PostgreSQL password from Key Vault '$keyVaultName'. Ensure your signed-in identity can read Key Vault secrets."
+    exit 1
+}
+
+Write-Host "PostgreSQL password retrieved from Key Vault." -ForegroundColor Green
 
 # Get Foundry API key
 Write-Host "Retrieving Foundry API key..." -ForegroundColor Yellow
@@ -165,6 +257,7 @@ Write-Host "=== Setup Complete ===" -ForegroundColor Green
 Write-Host ""
 Write-Host "Environment variables configured for:" -ForegroundColor Cyan
 Write-Host ("  - PostgreSQL: {0}" -f $postgresHost)
+Write-Host ("  - Key Vault: {0}" -f $keyVaultName)
 Write-Host ("  - Foundry: {0}" -f $foundryEndpoint)
 Write-Host ("  - Storage: {0}" -f $storageAccountName)
 Write-Host ("  - Foundry Model: {0}" -f $modelDeployment)

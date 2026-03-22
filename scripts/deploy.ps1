@@ -10,8 +10,142 @@ param(
     [string]$FoundryModelName = "gpt-4o-mini",
     [int]$FoundryModelCapacity = 10,
     [string[]]$FoundryModelFallbackNames = @("gpt-4.1-mini"),
-    [switch]$UseExistingFoundry
+    [switch]$UseExistingFoundry,
+    [switch]$PurgeDeletedFoundryAccount
 )
+
+function New-GeneratedPassword {
+    param([int]$Length = 32)
+
+    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+'
+    $bytes = New-Object byte[] $Length
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $chars = for ($i = 0; $i -lt $Length; $i++) { $alphabet[$bytes[$i] % $alphabet.Length] }
+    return -join $chars
+}
+
+function Get-CurrentPrincipalObjectId {
+    $account = az account show --output json 2>$null | ConvertFrom-Json
+    if (-not $account) {
+        return ''
+    }
+
+    if ($account.user.type -eq 'user') {
+        return az ad signed-in-user show --query id --output tsv 2>$null
+    }
+
+    if ($account.user.type -eq 'servicePrincipal') {
+        return az ad sp show --id $account.user.name --query id --output tsv 2>$null
+    }
+
+    return ''
+}
+
+function Get-CurrentPrincipalType {
+    $account = az account show --output json 2>$null | ConvertFrom-Json
+    if (-not $account) {
+        return ''
+    }
+
+    if ($account.user.type -eq 'user') {
+        return 'User'
+    }
+
+    if ($account.user.type -eq 'servicePrincipal') {
+        return 'ServicePrincipal'
+    }
+
+    return ''
+}
+
+function Get-KeyVaultSecretValue {
+    param(
+        [string]$VaultName,
+        [string]$SecretName
+    )
+
+    return az keyvault secret show --vault-name $VaultName --name $SecretName --query value --output tsv 2>$null
+}
+
+function Test-KeyVaultExists {
+    param([string]$VaultName)
+
+    $existingName = az keyvault show --name $VaultName --resource-group $ResourceGroup --query name --output tsv 2>$null
+    return -not [string]::IsNullOrWhiteSpace($existingName)
+}
+
+function Get-KeyVaultId {
+    param([string]$VaultName)
+
+    return az keyvault show --name $VaultName --resource-group $ResourceGroup --query id --output tsv 2>$null
+}
+
+function Grant-KeyVaultSecretReadAccess {
+    param(
+        [string]$VaultName,
+        [string]$PrincipalObjectId,
+        [string]$PrincipalType
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PrincipalObjectId) -or [string]::IsNullOrWhiteSpace($PrincipalType)) {
+        return $false
+    }
+
+    $keyVaultId = Get-KeyVaultId -VaultName $VaultName
+    if ([string]::IsNullOrWhiteSpace($keyVaultId)) {
+        return $false
+    }
+
+    $existingAssignment = az role assignment list --scope $keyVaultId --assignee-object-id $PrincipalObjectId --query "[?roleDefinitionId=='/subscriptions/$((az account show --query id -o tsv 2>$null))/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6'] | [0].id" --output tsv 2>$null
+    if (-not [string]::IsNullOrWhiteSpace($existingAssignment)) {
+        return $true
+    }
+
+    az role assignment create --role 4633458b-17de-408a-b874-0445c86b69e6 --assignee-object-id $PrincipalObjectId --assignee-principal-type $PrincipalType --scope $keyVaultId --output none 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Test-DeletedFoundryAccount {
+    param(
+        [string]$AccountName,
+        [string]$AccountLocation
+    )
+
+    $deletedAccount = az cognitiveservices account list-deleted --query "[?name=='$AccountName' && location=='$AccountLocation'] | [0].name" --output tsv 2>$null
+    return -not [string]::IsNullOrWhiteSpace($deletedAccount)
+}
+
+function Remove-DeletedFoundryAccount {
+    param(
+        [string]$AccountName,
+        [string]$AccountLocation
+    )
+
+    az cognitiveservices account purge --name $AccountName --location $AccountLocation --resource-group $ResourceGroup --output none
+    return ($LASTEXITCODE -eq 0)
+}
+
+function New-DeploymentOverrideFile {
+    param(
+        [hashtable]$ParameterValues
+    )
+
+    $overrideParameters = @{}
+    foreach ($key in $ParameterValues.Keys) {
+        $overrideParameters[$key] = @{ value = $ParameterValues[$key] }
+    }
+
+    $overrideContent = @{
+        '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+        contentVersion = '1.0.0.0'
+        parameters = $overrideParameters
+    }
+
+    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) ("deploy-overrides-{0}.json" -f ([System.Guid]::NewGuid().ToString('N')))
+    $overrideContent | ConvertTo-Json -Depth 10 | Set-Content -Path $tempPath -Encoding utf8
+    return $tempPath
+}
 
 # Check if Azure CLI is installed
 $azVersion = az version --output json 2>$null | ConvertFrom-Json
@@ -25,9 +159,42 @@ Write-Host "Resource Group: $ResourceGroup"
 Write-Host "Location: $Location"
 Write-Host ""
 
-# Prompt for secrets
-$postgresPassword = Read-Host "Enter PostgreSQL admin password" -AsSecureString
-$postgresPasswordPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($postgresPassword))
+$parameterData = Get-Content $ParametersFile | ConvertFrom-Json
+$resourceNamePrefix = $parameterData.parameters.resourceNamePrefix.value
+$keyVaultName = ("{0}kv" -f $resourceNamePrefix).ToLower()
+if ($keyVaultName.Length -gt 24) {
+    $keyVaultName = $keyVaultName.Substring(0, 24)
+}
+$foundryAccountName = ("{0}foundry" -f $resourceNamePrefix).ToLower()
+if ($foundryAccountName.Length -gt 24) {
+    $foundryAccountName = $foundryAccountName.Substring(0, 24)
+}
+$postgresPasswordSecretName = 'postgres-admin-password'
+$deploymentPrincipalObjectId = Get-CurrentPrincipalObjectId
+$deploymentPrincipalType = Get-CurrentPrincipalType
+
+$keyVaultExists = Test-KeyVaultExists -VaultName $keyVaultName
+$postgresPasswordPlain = ''
+
+if ($keyVaultExists) {
+    $postgresPasswordPlain = Get-KeyVaultSecretValue -VaultName $keyVaultName -SecretName $postgresPasswordSecretName
+    if ([string]::IsNullOrWhiteSpace($postgresPasswordPlain)) {
+        Write-Host "Key Vault '$keyVaultName' exists but the PostgreSQL secret is not currently readable. Attempting to grant this deployment identity Key Vault secret read access..." -ForegroundColor Yellow
+        if (Grant-KeyVaultSecretReadAccess -VaultName $keyVaultName -PrincipalObjectId $deploymentPrincipalObjectId -PrincipalType $deploymentPrincipalType) {
+            Start-Sleep -Seconds 15
+            $postgresPasswordPlain = Get-KeyVaultSecretValue -VaultName $keyVaultName -SecretName $postgresPasswordSecretName
+        }
+
+        if ([string]::IsNullOrWhiteSpace($postgresPasswordPlain)) {
+            Write-Error "Key Vault '$keyVaultName' already exists, but secret '$postgresPasswordSecretName' could not be read. Confirm your identity can read Key Vault secrets before redeploying."
+            exit 1
+        }
+    }
+    Write-Host "Reusing existing PostgreSQL admin password from Key Vault '$keyVaultName'." -ForegroundColor Green
+} else {
+    $postgresPasswordPlain = New-GeneratedPassword
+    Write-Host "Generated a new PostgreSQL admin password for Key Vault secret '$postgresPasswordSecretName'." -ForegroundColor Yellow
+}
 
 $deployFoundry = $true
 $foundryApiKeyPlain = ""
@@ -38,6 +205,18 @@ if ($UseExistingFoundry) {
     $foundryApiKey = Read-Host "Enter existing Microsoft Foundry API key" -AsSecureString
     $foundryApiKeyPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($foundryApiKey))
     $foundryEndpoint = Read-Host "Enter existing Microsoft Foundry endpoint (e.g., https://your-resource.openai.azure.com/)"
+} elseif (Test-DeletedFoundryAccount -AccountName $foundryAccountName -AccountLocation $Location) {
+    if ($PurgeDeletedFoundryAccount) {
+        Write-Host "Purging soft-deleted Foundry account '$foundryAccountName' in '$Location'..." -ForegroundColor Yellow
+        if (-not (Remove-DeletedFoundryAccount -AccountName $foundryAccountName -AccountLocation $Location)) {
+            Write-Error "Failed to purge soft-deleted Foundry account '$foundryAccountName'."
+            exit 1
+        }
+        Write-Host "Purged soft-deleted Foundry account '$foundryAccountName'." -ForegroundColor Green
+    } else {
+        Write-Error "Foundry account name '$foundryAccountName' is still reserved by a soft-deleted account in '$Location'. Re-run with -PurgeDeletedFoundryAccount or change resourceNamePrefix in config/parameters.dev.json."
+        exit 1
+    }
 }
 
 # Create resource group if not exists
@@ -60,20 +239,36 @@ function Invoke-InfraDeployment {
         [bool]$IncludeContainerApps = $false
     )
 
-    az deployment group create `
-        --resource-group $ResourceGroup `
-        --template-file $TemplateFile `
-        --parameters @$ParametersFile `
-        --parameters postgresAdminPassword="$postgresPasswordPlain" `
-                      deployFoundry="$deployFoundry" `
-                      deployFoundryModel="true" `
-                      foundryModel="$FoundryModelDeploymentName" `
-                      foundryModelName="$ModelName" `
-                      foundryModelSkuCapacity="$FoundryModelCapacity" `
-                      foundryApiKey="$foundryApiKeyPlain" `
-                      foundryEndpoint="$foundryEndpoint" `
-                      deployContainerApps="$IncludeContainerApps" `
-        --output json
+    $overridePath = New-DeploymentOverrideFile -ParameterValues @{
+        postgresAdminPassword = $postgresPasswordPlain
+        postgresPasswordSecretName = $postgresPasswordSecretName
+        deployFoundry = $deployFoundry
+        deployFoundryModel = $true
+        foundryModel = $FoundryModelDeploymentName
+        foundryModelName = $ModelName
+        foundryModelSkuCapacity = $FoundryModelCapacity
+        foundryApiKey = $foundryApiKeyPlain
+        foundryEndpoint = $foundryEndpoint
+        deployContainerApps = $IncludeContainerApps
+    }
+
+    try {
+        $azArgs = @(
+            'deployment', 'group', 'create',
+            '--resource-group', $ResourceGroup,
+            '--template-file', $TemplateFile,
+            '--parameters', "@$ParametersFile",
+            '--parameters', "@$overridePath",
+            '--output', 'json'
+        )
+
+        & az @azArgs
+    }
+    finally {
+        if (Test-Path $overridePath) {
+            Remove-Item $overridePath -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 # --- Phase 1: Deploy infrastructure (without container apps) ---
@@ -229,6 +424,12 @@ if ($LASTEXITCODE -eq 0) {
 
     Write-Host "PostgreSQL:" -ForegroundColor Cyan
     Write-Host "  Hostname: $($outputs.postgresHost.value)"
+    Write-Host "  Password secret: $($outputs.keyVaultName.value)/$($outputs.postgresCredentialName.value)"
+    Write-Host ""
+
+    Write-Host "Key Vault:" -ForegroundColor Cyan
+    Write-Host "  Name: $($outputs.keyVaultName.value)"
+    Write-Host "  URL: $($outputs.keyVaultUrl.value)"
     Write-Host ""
 
     Write-Host "Storage Account:" -ForegroundColor Cyan

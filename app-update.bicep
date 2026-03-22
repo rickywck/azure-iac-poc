@@ -28,9 +28,8 @@ param deployFoundry bool = true
 @description('Foundry deployment/model name consumed by agents app')
 param foundryModel string = 'gpt-4mini'
 
-@description('PostgreSQL admin password (secure)')
-@secure()
-param postgresAdminPassword string
+@description('Key Vault secret name for the PostgreSQL admin password')
+param postgresPasswordSecretName string = 'postgres-admin-password'
 
 @description('Foundry API key (secure, for external Foundry only)')
 @secure()
@@ -42,6 +41,7 @@ param foundryEndpoint string = ''
 var acrName = take('${resourceNamePrefix}acr', 50)
 var postgresServerName = take('${resourceNamePrefix}-psql', 63)
 var storageAccountName = toLower(take(replace('${resourceNamePrefix}storage', '-', ''), 24))
+var keyVaultName = toLower(take('${resourceNamePrefix}kv', 24))
 var containerAppsEnvName = '${resourceNamePrefix}-env'
 var containerAppUIName = '${resourceNamePrefix}-ui'
 var containerAppAgentsName = '${resourceNamePrefix}-agents'
@@ -67,6 +67,10 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-pr
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   #disable-next-line BCP334
   name: storageAccountName
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
 }
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
@@ -104,7 +108,8 @@ module containerAppsModule 'modules/containerApps.bicep' = {
     postgresHost: postgresServer.properties.fullyQualifiedDomainName
     postgresDatabase: postgresDatabaseName
     postgresUsername: postgresAdminUsername
-    postgresPassword: postgresAdminPassword
+    keyVaultUrl: keyVault.properties.vaultUri
+    postgresPasswordSecretName: postgresPasswordSecretName
     storageAccountName: storageAccountName
     storageContainerName: storageContainerName
     storageAccountKey: storageAccount.listKeys().keys[0].value
@@ -123,6 +128,7 @@ module managedIdentitiesModule 'modules/managedIdentities.bicep' = {
     containerAppUIIdentityId: containerAppsModule.outputs.containerAppUIIdentityId
     containerAppAgentsIdentityId: containerAppsModule.outputs.containerAppAgentsIdentityId
     storageAccountName: storageAccountName
+    keyVaultName: keyVaultName
   }
 }
 
@@ -130,6 +136,9 @@ output acrLoginServer string = acrResource.properties.loginServer
 output acrName string = acrName
 output uiAppURL string = containerAppsModule.outputs.containerAppUIFqdn
 output agentsInternalFqdn string = containerAppsModule.outputs.containerAppAgentsFqdn
+output keyVaultName string = keyVault.name
+output keyVaultUrl string = keyVault.properties.vaultUri
+output postgresCredentialName string = postgresPasswordSecretName
 output foundryEndpoint string = resolvedFoundryEndpoint
 output foundryAccountName string = deployFoundry ? foundryAccountName : 'external-foundry'
 output foundryModelDeploymentName string = foundryModel

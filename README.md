@@ -58,6 +58,7 @@ cd C:\Users\ricky\poc\azure-iac
 This flow:
 
 - creates or updates the resource group
+- generates or reuses a PostgreSQL admin password and stores it in Azure Key Vault
 - deploys infrastructure resources
 - builds and pushes the `ui`, `backend`, and `agents` images
 - deploys both Container Apps
@@ -75,6 +76,7 @@ This flow:
 
 - rebuilds and pushes the current application images
 - updates only the Container Apps layer
+- preserves the existing Key Vault managed PostgreSQL password
 - does not redeploy ACR, PostgreSQL, Storage, Monitor, or Foundry infrastructure
 
 ### External Foundry Mode
@@ -117,7 +119,7 @@ Generate `.env` files from the deployed Azure resources:
 
 ```powershell
 cd C:\Users\ricky\poc\azure-iac
-.\scripts\setup-local-env.ps1 -ResourceGroup rg-agentic-poc-dev -PostgresPassword "YourPostgresPassword"
+.\scripts\setup-local-env.ps1 -ResourceGroup rg-agentic-poc-dev
 ```
 
 This creates:
@@ -125,6 +127,15 @@ This creates:
 - `sample-app/backend/.env`
 - `sample-app/agents/.env`
 - `sample-app/ui/.env` for Vite dev mode only
+
+The setup script:
+
+- reads the PostgreSQL password from Azure Key Vault and writes it into the local backend `.env`
+- ensures the Azure PostgreSQL firewall allows the current public client IP through a `local-dev-client` rule
+
+In Azure, the backend resolves the same password from Key Vault at runtime using its managed identity.
+
+If your public IP changes, rerun `scripts/setup-local-env.ps1` before starting the local stack so the PostgreSQL firewall rule stays aligned with your current client IP.
 
 ### Run the Full App Locally with Docker Compose
 
@@ -157,6 +168,7 @@ docker compose down
 - Agent chat routed from backend to dedicated agents service
 - Explicit split between transactional/backend workload and agentic workload
 - Azure integrations for PostgreSQL, Storage, App Insights, and Foundry
+- PostgreSQL password managed in Azure Key Vault
 
 ### Tech Stack
 
@@ -174,6 +186,10 @@ docker compose down
   - independently troubleshot
 - The backend does not depend on LangChain.
 - The agentic workload is isolated in the agents service.
+- The backend code supports both local and Azure secret resolution with the same config logic:
+  - local uses `POSTGRES_PASSWORD` from `.env`
+  - Azure uses `KEY_VAULT_URL` and `POSTGRES_PASSWORD_SECRET_NAME`
+- Local Docker development talks to the Azure PostgreSQL server directly, so successful local startup depends on the `local-dev-client` firewall rule matching your current public IP.
 - `deploy.ps1` is the full environment deployment path.
 - `deploy-app.ps1` is the faster application-only update path.
 

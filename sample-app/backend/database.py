@@ -5,9 +5,28 @@ from sqlalchemy.sql import func
 from datetime import datetime
 import os
 from urllib.parse import quote_plus
+from functools import lru_cache
 from dotenv import load_dotenv
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
 load_dotenv()
+
+
+@lru_cache(maxsize=1)
+def resolve_postgres_password() -> str:
+    password = os.getenv("POSTGRES_PASSWORD", "")
+    if password:
+        return password
+
+    key_vault_url = os.getenv("KEY_VAULT_URL", "")
+    secret_name = os.getenv("POSTGRES_PASSWORD_SECRET_NAME", "")
+    if not key_vault_url or not secret_name:
+        return ""
+
+    credential = DefaultAzureCredential()
+    client = SecretClient(vault_url=key_vault_url, credential=credential)
+    return client.get_secret(secret_name).value
 
 
 def build_database_url() -> str:
@@ -16,7 +35,7 @@ def build_database_url() -> str:
         return database_url
 
     postgres_user = os.getenv("POSTGRES_USER", "")
-    postgres_password = os.getenv("POSTGRES_PASSWORD", "")
+    postgres_password = resolve_postgres_password()
     postgres_host = os.getenv("POSTGRES_HOST", "localhost")
     postgres_db = os.getenv("POSTGRES_DB", "postgres")
 

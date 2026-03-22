@@ -56,6 +56,9 @@ param foundryModelSkuCapacity int = 10
 @secure()
 param postgresAdminPassword string
 
+@description('Key Vault secret name for the PostgreSQL admin password')
+param postgresPasswordSecretName string = 'postgres-admin-password'
+
 @description('Foundry API key (secure)')
 @secure()
 param foundryApiKey string = ''
@@ -70,6 +73,7 @@ param deployContainerApps bool = true
 var acrName = take('${resourceNamePrefix}acr', 50) // ACR max 50 chars, must be alphanumeric
 var postgresServerName = take('${resourceNamePrefix}-psql', 63)
 var storageAccountName = toLower(take(replace('${resourceNamePrefix}storage', '-', ''), 24))
+var keyVaultName = toLower(take('${resourceNamePrefix}kv', 24))
 var containerAppsEnvName = '${resourceNamePrefix}-env'
 var containerAppUIName = '${resourceNamePrefix}-ui'
 var containerAppAgentsName = '${resourceNamePrefix}-agents'
@@ -114,6 +118,17 @@ module storageModule 'modules/storage.bicep' = {
     location: location
     accountName: storageAccountName
     containerName: storageContainerName
+    tags: tags
+  }
+}
+
+module keyVaultModule 'modules/keyVault.bicep' = {
+  name: 'keyVaultDeployment'
+  params: {
+    location: location
+    keyVaultName: keyVaultName
+    postgresPasswordSecretName: postgresPasswordSecretName
+    postgresAdminPassword: postgresAdminPassword
     tags: tags
   }
 }
@@ -165,7 +180,8 @@ module containerAppsModule 'modules/containerApps.bicep' = if (deployContainerAp
     postgresHost: postgresModule.outputs.host
     postgresDatabase: postgresDatabaseName
     postgresUsername: postgresAdminUsername
-    postgresPassword: postgresAdminPassword
+    keyVaultUrl: keyVaultModule.outputs.vaultUri
+    postgresPasswordSecretName: keyVaultModule.outputs.postgresCredentialName
     storageAccountName: storageAccountName
     storageContainerName: storageContainerName
     storageAccountKey: storageModule.outputs.primaryKey
@@ -186,6 +202,7 @@ module managedIdentitiesModule 'modules/managedIdentities.bicep' = if (deployCon
     #disable-next-line BCP318
     containerAppAgentsIdentityId: containerAppsModule.outputs.containerAppAgentsIdentityId
     storageAccountName: storageAccountName
+    keyVaultName: keyVaultModule.outputs.keyVaultName
   }
 }
 
@@ -197,6 +214,9 @@ output uiAppURL string = deployContainerApps ? containerAppsModule.outputs.conta
 #disable-next-line BCP318
 output agentsInternalFqdn string = deployContainerApps ? containerAppsModule.outputs.containerAppAgentsFqdn : ''
 output postgresHost string = postgresModule.outputs.host
+output keyVaultName string = keyVaultModule.outputs.keyVaultName
+output keyVaultUrl string = keyVaultModule.outputs.vaultUri
+output postgresCredentialName string = keyVaultModule.outputs.postgresCredentialName
 output storageAccountName string = storageAccountName
 output appInsightsInstrumentationKey string = monitorModule.outputs.instrumentationKey
 output foundryEndpoint string = resolvedFoundryEndpoint

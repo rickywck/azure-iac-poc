@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "13335051974093359957"
+      "templateHash": "8520998203528272924"
     }
   },
   "parameters": {
@@ -72,10 +72,11 @@
         "description": "Foundry deployment/model name consumed by agents app"
       }
     },
-    "postgresAdminPassword": {
-      "type": "securestring",
+    "postgresPasswordSecretName": {
+      "type": "string",
+      "defaultValue": "postgres-admin-password",
       "metadata": {
-        "description": "PostgreSQL admin password (secure)"
+        "description": "Key Vault secret name for the PostgreSQL admin password"
       }
     },
     "foundryApiKey": {
@@ -97,6 +98,7 @@
     "acrName": "[take(format('{0}acr', parameters('resourceNamePrefix')), 50)]",
     "postgresServerName": "[take(format('{0}-psql', parameters('resourceNamePrefix')), 63)]",
     "storageAccountName": "[toLower(take(replace(format('{0}storage', parameters('resourceNamePrefix')), '-', ''), 24))]",
+    "keyVaultName": "[toLower(take(format('{0}kv', parameters('resourceNamePrefix')), 24))]",
     "containerAppsEnvName": "[format('{0}-env', parameters('resourceNamePrefix'))]",
     "containerAppUIName": "[format('{0}-ui', parameters('resourceNamePrefix'))]",
     "containerAppAgentsName": "[format('{0}-agents', parameters('resourceNamePrefix'))]",
@@ -165,8 +167,11 @@
           "postgresUsername": {
             "value": "[parameters('postgresAdminUsername')]"
           },
-          "postgresPassword": {
-            "value": "[parameters('postgresAdminPassword')]"
+          "keyVaultUrl": {
+            "value": "[reference(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), '2023-07-01').vaultUri]"
+          },
+          "postgresPasswordSecretName": {
+            "value": "[parameters('postgresPasswordSecretName')]"
           },
           "storageAccountName": {
             "value": "[variables('storageAccountName')]"
@@ -197,7 +202,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "9160187024271449823"
+              "templateHash": "17515628622765118646"
             }
           },
           "parameters": {
@@ -270,10 +275,16 @@
                 "description": "PostgreSQL username"
               }
             },
-            "postgresPassword": {
-              "type": "securestring",
+            "keyVaultUrl": {
+              "type": "string",
               "metadata": {
-                "description": "PostgreSQL password"
+                "description": "Key Vault URL"
+              }
+            },
+            "postgresPasswordSecretName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault secret name for the PostgreSQL password"
               }
             },
             "storageAccountName": {
@@ -416,10 +427,6 @@
                       "value": "[parameters('acrPassword')]"
                     },
                     {
-                      "name": "postgres-password",
-                      "value": "[parameters('postgresPassword')]"
-                    },
-                    {
                       "name": "storage-key",
                       "value": "[parameters('storageAccountKey')]"
                     },
@@ -505,12 +512,20 @@
                           "value": "[parameters('postgresUsername')]"
                         },
                         {
-                          "name": "POSTGRES_PASSWORD",
-                          "secretRef": "postgres-password"
-                        },
-                        {
                           "name": "POSTGRES_SSLMODE",
                           "value": "require"
+                        },
+                        {
+                          "name": "KEY_VAULT_URL",
+                          "value": "[parameters('keyVaultUrl')]"
+                        },
+                        {
+                          "name": "POSTGRES_PASSWORD_SECRET_NAME",
+                          "value": "[parameters('postgresPasswordSecretName')]"
+                        },
+                        {
+                          "name": "AZURE_CLIENT_ID",
+                          "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('containerAppUIName'))), '2023-01-31').clientId]"
                         },
                         {
                           "name": "AGENT_SERVICE_URL",
@@ -612,10 +627,6 @@
                     {
                       "name": "acr-password",
                       "value": "[parameters('acrPassword')]"
-                    },
-                    {
-                      "name": "postgres-password",
-                      "value": "[parameters('postgresPassword')]"
                     },
                     {
                       "name": "storage-key",
@@ -782,6 +793,9 @@
           },
           "storageAccountName": {
             "value": "[variables('storageAccountName')]"
+          },
+          "keyVaultName": {
+            "value": "[variables('keyVaultName')]"
           }
         },
         "template": {
@@ -791,7 +805,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "15982774783490166061"
+              "templateHash": "9939125487046979843"
             }
           },
           "parameters": {
@@ -811,6 +825,12 @@
               "type": "string",
               "metadata": {
                 "description": "Storage account name"
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault name"
               }
             }
           },
@@ -833,6 +853,16 @@
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
                 "principalId": "[parameters('containerAppAgentsIdentityId')]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(parameters('containerAppUIIdentityId'), resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'key-vault-secrets-user')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+                "principalId": "[parameters('containerAppUIIdentityId')]"
               }
             }
           ]
@@ -859,6 +889,18 @@
     "agentsInternalFqdn": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'containerAppsDeployment'), '2025-04-01').outputs.containerAppAgentsFqdn.value]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[variables('keyVaultName')]"
+    },
+    "keyVaultUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), '2023-07-01').vaultUri]"
+    },
+    "postgresCredentialName": {
+      "type": "string",
+      "value": "[parameters('postgresPasswordSecretName')]"
     },
     "foundryEndpoint": {
       "type": "string",

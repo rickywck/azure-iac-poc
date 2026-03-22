@@ -7,9 +7,16 @@ param containerAppAgentsIdentityId string
 @description('Storage account name')
 param storageAccountName string
 
+@description('Key Vault name')
+param keyVaultName string
+
 // Storage account resource reference
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   name: storageAccountName
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
 }
 
 // Assign Storage Blob Data Contributor role to UI app identity
@@ -31,3 +38,13 @@ resource agentsStorageRole 'Microsoft.Authorization/roleAssignments@2020-04-01-p
     principalId: containerAppAgentsIdentityId
   }
 }
+
+resource uiKeyVaultSecretsRole 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+  name: guid(containerAppUIIdentityId, keyVault.id, 'key-vault-secrets-user')
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    principalId: containerAppUIIdentityId
+  }
+}
+
