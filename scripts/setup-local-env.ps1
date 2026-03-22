@@ -150,7 +150,7 @@ $agentsPath = "sample-app/agents/.env"
 Set-Content -Path $agentsPath -Value $agentsEnv
 Write-Host "Created $agentsPath" -ForegroundColor Green
 
-# UI .env (only needs API endpoint)
+# UI .env for Vite dev only; containerized UI now gets runtime config from BACKEND_UPSTREAM.
 $uiEnv = @"
 # API endpoint for UI to call backend
 VITE_API_URL=http://localhost:8000/api

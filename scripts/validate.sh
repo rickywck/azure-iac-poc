@@ -16,7 +16,7 @@ az group show --name $RESOURCE_GROUP --output table 2>/dev/null || {
 # Get deployment outputs
 ACR_NAME=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.acrName.value -o tsv 2>/dev/null)
 UI_APP_URL=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.uiAppURL.value -o tsv 2>/dev/null)
-AGENTS_APP_URL=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.agentsAppURL.value -o tsv 2>/dev/null)
+AGENTS_INTERNAL_FQDN=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.agentsInternalFqdn.value -o tsv 2>/dev/null)
 
 if [ -z "$ACR_NAME" ]; then
     echo "ERROR: Deployment outputs not found. Run ./scripts/deploy.sh first."
@@ -33,7 +33,7 @@ ENV_NAME=$(az containerapp env show --name ${ACR_NAME%acr}-env --resource-group 
 UI_APP_NAME=$(az containerapp show --name ${ACR_NAME%acr}-ui --resource-group $RESOURCE_GROUP --query name -o tsv 2>/dev/null) && echo "✓ UI Container App: $UI_APP_NAME (https://$UI_APP_URL)" || echo "✗ UI Container App not found"
 
 # Validate Agents Container App
-AGENTS_APP_NAME=$(az containerapp show --name ${ACR_NAME%acr}-agents --resource-group $RESOURCE_GROUP --query name -o tsv 2>/dev/null) && echo "✓ Agents Container App: $AGENTS_APP_NAME (https://$AGENTS_APP_URL)" || echo "✗ Agents Container App not found"
+AGENTS_APP_NAME=$(az containerapp show --name ${ACR_NAME%acr}-agents --resource-group $RESOURCE_GROUP --query name -o tsv 2>/dev/null) && echo "✓ Agents Container App: $AGENTS_APP_NAME (internal FQDN: $AGENTS_INTERNAL_FQDN)" || echo "✗ Agents Container App not found"
 
 # Validate PostgreSQL
 POSTGRES_SERVER=$(az postgres flexible-server show --name ${ACR_NAME%acr}-psql --resource-group $RESOURCE_GROUP --query name -o tsv 2>/dev/null) && echo "✓ PostgreSQL Server: $POSTGRES_SERVER" || echo "✗ PostgreSQL Server not found"
@@ -57,13 +57,8 @@ if [ -n "$UI_APP_URL" ]; then
     fi
 fi
 
-if [ -n "$AGENTS_APP_URL" ]; then
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://$AGENTS_APP_URL || echo "000")
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "✓ Agents App is responding (HTTP $HTTP_CODE)"
-    else
-        echo "⚠ Agents App returned HTTP $HTTP_CODE"
-    fi
+if [ -n "$AGENTS_INTERNAL_FQDN" ]; then
+    echo "ℹ Agents app uses internal ingress only; skipping public HTTP check"
 fi
 
 echo ""

@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "15754448530251828153"
+      "templateHash": "1603384086648745878"
     }
   },
   "parameters": {
@@ -924,7 +924,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "17983530702834798540"
+              "templateHash": "9160187024271449823"
             }
           },
           "parameters": {
@@ -1174,8 +1174,8 @@
                       },
                       "env": [
                         {
-                          "name": "VITE_API_URL",
-                          "value": "http://localhost:8000"
+                          "name": "BACKEND_UPSTREAM",
+                          "value": "localhost:8000"
                         },
                         {
                           "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
@@ -1591,7 +1591,7 @@
       "type": "string",
       "value": "[if(parameters('deployContainerApps'), reference('containerAppsModule').outputs.containerAppUIFqdn.value, '')]"
     },
-    "agentsAppURL": {
+    "agentsInternalFqdn": {
       "type": "string",
       "value": "[if(parameters('deployContainerApps'), reference('containerAppsModule').outputs.containerAppAgentsFqdn.value, '')]"
     },

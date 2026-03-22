@@ -195,7 +195,7 @@ output acrName string = acrName
 #disable-next-line BCP318
 output uiAppURL string = deployContainerApps ? containerAppsModule.outputs.containerAppUIFqdn : ''
 #disable-next-line BCP318
-output agentsAppURL string = deployContainerApps ? containerAppsModule.outputs.containerAppAgentsFqdn : ''
+output agentsInternalFqdn string = deployContainerApps ? containerAppsModule.outputs.containerAppAgentsFqdn : ''
 output postgresHost string = postgresModule.outputs.host
 output storageAccountName string = storageAccountName
 output appInsightsInstrumentationKey string = monitorModule.outputs.instrumentationKey

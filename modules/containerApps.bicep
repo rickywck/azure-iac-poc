@@ -172,8 +172,8 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
           }
           env: [
             {
-              name: 'VITE_API_URL'
-              value: 'http://localhost:8000'
+              name: 'BACKEND_UPSTREAM'
+              value: 'localhost:8000'
             }
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'

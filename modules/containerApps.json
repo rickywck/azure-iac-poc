@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "5794185599225358171"
+      "templateHash": "9160187024271449823"
     }
   },
   "parameters": {
@@ -13,12 +13,6 @@
       "type": "string",
       "metadata": {
         "description": "Resource location"
-      }
-    },
-    "environmentName": {
-      "type": "string",
-      "metadata": {
-        "description": "Environment name"
       }
     },
     "containerAppUIName": {
@@ -39,17 +33,14 @@
         "description": "Container Apps Environment name"
       }
     },
-    "resourceGroupName": {
-      "type": "string",
-      "metadata": {
-        "description": "Resource group name"
-      }
-    },
     "logAnalyticsWorkspaceId": {
       "type": "string",
       "metadata": {
         "description": "Log Analytics workspace ID"
       }
+    },
+    "logAnalyticsSharedKey": {
+      "type": "securestring"
     },
     "acrLoginServer": {
       "type": "string",
@@ -151,6 +142,19 @@
         "description": "OpenAI API key"
       }
     },
+    "foundryEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry endpoint URL"
+      }
+    },
+    "foundryModel": {
+      "type": "string",
+      "defaultValue": "gpt-4mini",
+      "metadata": {
+        "description": "Foundry deployment/model name"
+      }
+    },
     "langSmithApiKey": {
       "type": "securestring",
       "metadata": {
@@ -168,7 +172,8 @@
         "appLogsConfiguration": {
           "destination": "log-analytics",
           "logAnalyticsConfiguration": {
-            "customerId": "[parameters('logAnalyticsWorkspaceId')]"
+            "customerId": "[parameters('logAnalyticsWorkspaceId')]",
+            "sharedKey": "[parameters('logAnalyticsSharedKey')]"
           }
         }
       },
@@ -250,8 +255,8 @@
               },
               "env": [
                 {
-                  "name": "VITE_API_URL",
-                  "value": "http://localhost:8000"
+                  "name": "BACKEND_UPSTREAM",
+                  "value": "localhost:8000"
                 },
                 {
                   "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
@@ -265,9 +270,9 @@
                     "port": 80,
                     "path": "/"
                   },
-                  "initialDelay": 10,
-                  "period": 10,
-                  "timeout": 5,
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
                   "failureThreshold": 3
                 },
                 {
@@ -276,9 +281,9 @@
                     "port": 80,
                     "path": "/"
                   },
-                  "initialDelay": 5,
-                  "period": 5,
-                  "timeout": 3,
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 3,
                   "failureThreshold": 3
                 }
               ]
@@ -300,7 +305,7 @@
                   "value": "5432"
                 },
                 {
-                  "name": "POSTGRES_DATABASE",
+                  "name": "POSTGRES_DB",
                   "value": "[parameters('postgresDatabase')]"
                 },
                 {
@@ -312,6 +317,14 @@
                   "secretRef": "postgres-password"
                 },
                 {
+                  "name": "POSTGRES_SSLMODE",
+                  "value": "require"
+                },
+                {
+                  "name": "AGENT_SERVICE_URL",
+                  "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('containerAppAgentsName')), '2023-05-01').latestRevisionFqdn)]"
+                },
+                {
                   "name": "STORAGE_ACCOUNT_NAME",
                   "value": "[parameters('storageAccountName')]"
                 },
@@ -320,7 +333,7 @@
                   "value": "[parameters('storageContainerName')]"
                 },
                 {
-                  "name": "AZURE_STORAGE_KEY",
+                  "name": "STORAGE_ACCOUNT_KEY",
                   "secretRef": "storage-key"
                 },
                 {
@@ -335,9 +348,9 @@
                     "port": 8000,
                     "path": "/health"
                   },
-                  "initialDelay": 30,
-                  "period": 15,
-                  "timeout": 10,
+                  "initialDelaySeconds": 30,
+                  "periodSeconds": 15,
+                  "timeoutSeconds": 10,
                   "failureThreshold": 3
                 },
                 {
@@ -346,9 +359,9 @@
                     "port": 8000,
                     "path": "/ready"
                   },
-                  "initialDelay": 10,
-                  "period": 10,
-                  "timeout": 5,
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
                   "failureThreshold": 3
                 }
               ]
@@ -373,6 +386,7 @@
       },
       "tags": "[parameters('tags')]",
       "dependsOn": [
+        "[resourceId('Microsoft.App/containerApps', parameters('containerAppAgentsName'))]",
         "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('containerAppUIName')))]"
       ]
@@ -392,6 +406,16 @@
         "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
         "configuration": {
           "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": false,
+            "targetPort": 8000,
+            "traffic": [
+              {
+                "weight": 100,
+                "latestRevision": true
+              }
+            ]
+          },
           "secrets": [
             {
               "name": "acr-password",
@@ -437,40 +461,20 @@
               },
               "env": [
                 {
-                  "name": "POSTGRES_HOST",
-                  "value": "[parameters('postgresHost')]"
-                },
-                {
-                  "name": "POSTGRES_PORT",
-                  "value": "5432"
-                },
-                {
-                  "name": "POSTGRES_DATABASE",
-                  "value": "[parameters('postgresDatabase')]"
-                },
-                {
-                  "name": "POSTGRES_USER",
-                  "value": "[parameters('postgresUsername')]"
-                },
-                {
-                  "name": "POSTGRES_PASSWORD",
-                  "secretRef": "postgres-password"
-                },
-                {
-                  "name": "STORAGE_ACCOUNT_NAME",
-                  "value": "[parameters('storageAccountName')]"
-                },
-                {
-                  "name": "STORAGE_CONTAINER_NAME",
-                  "value": "[parameters('storageContainerName')]"
-                },
-                {
-                  "name": "AZURE_STORAGE_KEY",
-                  "secretRef": "storage-key"
+                  "name": "FOUNDRY_API_KEY",
+                  "secretRef": "openai-key"
                 },
                 {
                   "name": "OPENAI_API_KEY",
                   "secretRef": "openai-key"
+                },
+                {
+                  "name": "FOUNDRY_ENDPOINT",
+                  "value": "[parameters('foundryEndpoint')]"
+                },
+                {
+                  "name": "FOUNDRY_MODEL",
+                  "value": "[parameters('foundryModel')]"
                 },
                 {
                   "name": "LANGCHAIN_API_KEY",
@@ -489,23 +493,23 @@
                 {
                   "type": "Liveness",
                   "httpGet": {
-                    "port": 8001,
+                    "port": 8000,
                     "path": "/health"
                   },
-                  "initialDelay": 30,
-                  "period": 15,
-                  "timeout": 10,
+                  "initialDelaySeconds": 30,
+                  "periodSeconds": 15,
+                  "timeoutSeconds": 10,
                   "failureThreshold": 3
                 },
                 {
                   "type": "Readiness",
                   "httpGet": {
-                    "port": 8001,
+                    "port": 8000,
                     "path": "/ready"
                   },
-                  "initialDelay": 10,
-                  "period": 10,
-                  "timeout": 5,
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
                   "failureThreshold": 3
                 }
               ]
@@ -558,11 +562,11 @@
     },
     "containerAppUIFqdn": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppUIName')), '2023-05-01').configuration.ingress.fqdn]"
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppUIName')), '2023-05-01').latestRevisionFqdn]"
     },
     "containerAppAgentsFqdn": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppAgentsName')), '2023-05-01').configuration.ingress.fqdn]"
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppAgentsName')), '2023-05-01').latestRevisionFqdn]"
     }
   }
 }

@@ -223,7 +223,8 @@ if ($LASTEXITCODE -eq 0) {
 
     Write-Host "Container Apps:" -ForegroundColor Cyan
     Write-Host "  UI+Backend URL: https://$($outputs.uiAppURL.value)"
-    Write-Host "  Agents URL: https://$($outputs.agentsAppURL.value)"
+    Write-Host "  Agents internal FQDN: $($outputs.agentsInternalFqdn.value)"
+    Write-Host "  Note: Agents ingress is internal only and is not browser-accessible." -ForegroundColor DarkGray
     Write-Host ""
 
     Write-Host "PostgreSQL:" -ForegroundColor Cyan

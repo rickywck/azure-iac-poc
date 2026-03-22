@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "4501665253037367413"
+      "templateHash": "13335051974093359957"
     }
   },
   "parameters": {
@@ -197,7 +197,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "17983530702834798540"
+              "templateHash": "9160187024271449823"
             }
           },
           "parameters": {
@@ -447,8 +447,8 @@
                       },
                       "env": [
                         {
-                          "name": "VITE_API_URL",
-                          "value": "http://localhost:8000"
+                          "name": "BACKEND_UPSTREAM",
+                          "value": "localhost:8000"
                         },
                         {
                           "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
@@ -856,7 +856,7 @@
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'containerAppsDeployment'), '2025-04-01').outputs.containerAppUIFqdn.value]"
     },
-    "agentsAppURL": {
+    "agentsInternalFqdn": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'containerAppsDeployment'), '2025-04-01').outputs.containerAppAgentsFqdn.value]"
     },

@@ -43,7 +43,7 @@ echo "Extracting deployment outputs..."
 ACR_NAME=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.acrName.value -o tsv)
 ACR_LOGIN_SERVER=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.acrLoginServer.value -o tsv)
 UI_APP_URL=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.uiAppURL.value -o tsv)
-AGENTS_APP_URL=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.agentsAppURL.value -o tsv)
+AGENTS_INTERNAL_FQDN=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.agentsInternalFqdn.value -o tsv)
 POSTGRES_HOST=$(az deployment group show --resource-group $RESOURCE_GROUP --name main.bicep --query properties.outputs.postgresHost.value -o tsv)
 
 echo ""
@@ -52,7 +52,8 @@ echo "================================"
 echo "ACR Login Server: $ACR_LOGIN_SERVER"
 echo "ACR Name: $ACR_NAME"
 echo "UI App URL: https://$UI_APP_URL"
-echo "Agents App URL: https://$AGENTS_APP_URL"
+echo "Agents internal FQDN: $AGENTS_INTERNAL_FQDN"
+echo "Note: Agents ingress is internal only and is not browser-accessible."
 echo "PostgreSQL Host: $POSTGRES_HOST"
 echo "================================"
 echo ""

@@ -93,9 +93,11 @@ or
 
 ## Accessing the Azure Application
 
-After deployment, the script prints the Container App URLs.
+After deployment, the script prints the public UI URL and the internal agents service FQDN.
 
 Use the `UI+Backend URL` as the application entry point.
+
+Do not expect the agents service FQDN to open in a browser. The agents Container App uses internal ingress only and is intended to be called by the backend, not directly from the public internet.
 
 You can also query outputs manually:
 
@@ -122,11 +124,13 @@ This creates:
 
 - `sample-app/backend/.env`
 - `sample-app/agents/.env`
-- `sample-app/ui/.env`
+- `sample-app/ui/.env` for Vite dev mode only
 
 ### Run the Full App Locally with Docker Compose
 
 This is the preferred local workflow because it mirrors the deployed two-app architecture.
+
+The same `ui`, `backend`, and `agents` images can be used locally and in Azure. Environment-specific values are injected at runtime instead of being baked into the images.
 
 ```powershell
 cd C:\Users\ricky\poc\azure-iac
