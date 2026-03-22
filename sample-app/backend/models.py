@@ -22,7 +22,13 @@ class Task(TaskBase):
         from_attributes = True
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=2000)
+    message: str = Field(..., min_length=1, max_length=12000)
 
 class ChatResponse(BaseModel):
     message: str
+    is_calculation: bool = False
+    mode: str = "direct"
+    direct_response: str = ""
+    code_result: str = ""
+    generated_python: str = ""
+    execution_backend: str = ""

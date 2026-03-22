@@ -91,20 +91,30 @@ if ($UseExternalFoundry) {
 Write-Host ""
 Write-Host "=== Phase 1: Building and pushing application images in ACR ===" -ForegroundColor Cyan
 
+# Use a unique timestamped tag so ARM detects a change and forces Container Apps to pull the new image.
+# Without this, passing the same ':latest' tag causes ARM to treat the resource as unchanged (idempotent no-op).
+$imageTag = Get-Date -Format 'yyyyMMddHHmm'
+Write-Host "Image tag: $imageTag" -ForegroundColor DarkGray
+
 $acrBuilds = @(
-    @{ Tag = "ui:latest";      Context = "./sample-app/ui" },
-    @{ Tag = "backend:latest"; Context = "./sample-app/backend" },
-    @{ Tag = "agents:latest";  Context = "./sample-app/agents" }
+    @{ Name = "ui";      Context = "./sample-app/ui" },
+    @{ Name = "backend"; Context = "./sample-app/backend" },
+    @{ Name = "agents";  Context = "./sample-app/agents" }
 )
 
 foreach ($img in $acrBuilds) {
-    Write-Host "Building $($img.Tag) in ACR..." -ForegroundColor Yellow
-    az acr build -r $acrName -t $img.Tag $img.Context
+    Write-Host "Building $($img.Name):$imageTag in ACR..." -ForegroundColor Yellow
+    az acr build -r $acrName -t "$($img.Name):$imageTag" -t "$($img.Name):latest" $img.Context
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ACR build failed for $($img.Tag)" -ForegroundColor Red
+        Write-Host "ACR build failed for $($img.Name)" -ForegroundColor Red
         exit 1
     }
 }
+
+# Override image params with timestamped tags for the Bicep deployment
+$uiImage      = "ui:$imageTag"
+$backendImage = "backend:$imageTag"
+$agentsImage  = "agents:$imageTag"
 
 Write-Host ""
 Write-Host "=== Phase 2: Updating Azure Container Apps ===" -ForegroundColor Cyan

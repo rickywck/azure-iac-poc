@@ -25,7 +25,16 @@ export default function AgentChatTab() {
 
     try {
       const response = await api.sendChatMessage(userMessage)
-      setMessages(prev => [...prev, { role: 'agent', content: response.message }])
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        content: response.message,
+        isCalculation: response.is_calculation,
+        mode: response.mode,
+        directResponse: response.direct_response,
+        codeResult: response.code_result,
+        generatedPython: response.generated_python,
+        executionBackend: response.execution_backend,
+      }])
     } catch (err) {
       setError('Failed to get response: ' + err.message)
       setMessages(prev => [...prev, { role: 'agent', content: 'Sorry, I encountered an error.' }])
@@ -42,13 +51,36 @@ export default function AgentChatTab() {
         {messages.length === 0 && (
           <div className="chat-empty">
             <p>Start a conversation with the AI agent!</p>
-            <p>Ask anything and get a response powered by gpt-4mini.</p>
+            <p>Ask anything and get a response powered by gpt-5.1-codex-mini.</p>
           </div>
         )}
         {messages.map((msg, idx) => (
           <div key={idx} className={`message message-${msg.role}`}>
             <div className="message-role">{msg.role === 'user' ? 'You' : 'Agent'}</div>
-            <div className="message-content">{msg.content}</div>
+            <div className="message-content">
+              <div>{msg.content}</div>
+              {msg.role === 'agent' && msg.isCalculation && (
+                <div className="calc-comparison">
+                  <div className="calc-card">
+                    <div className="calc-title">Approach A: Direct LLM Output</div>
+                    <pre className="calc-pre">{msg.directResponse || 'N/A'}</pre>
+                  </div>
+                  <div className="calc-card">
+                    <div className="calc-title">Approach B: Python Execution Output</div>
+                    <pre className="calc-pre calc-pre-result">{msg.codeResult || 'N/A'}</pre>
+                    {msg.executionBackend && (
+                      <div className="calc-meta">Execution backend: {msg.executionBackend}</div>
+                    )}
+                  </div>
+                  {msg.generatedPython && (
+                    <details className="calc-code">
+                      <summary>Generated Python Script</summary>
+                      <pre>{msg.generatedPython}</pre>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         ))}
         {loading && (

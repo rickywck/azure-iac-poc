@@ -38,10 +38,10 @@ param deployFoundry bool = true
 param foundrySku string = 'S0'
 
 @description('Foundry model/deployment name consumed by agents app')
-param foundryModel string = 'gpt-4mini'
+param foundryModel string = 'gpt-5.1-codex-mini'
 
-@description('Foundry model name to deploy in the account (for example: gpt-4o-mini)')
-param foundryModelName string = 'gpt-4o-mini'
+@description('Foundry model name to deploy in the account (for example: gpt-5.1-codex-mini)')
+param foundryModelName string = 'gpt-5.1-codex-mini'
 
 @description('Deploy a Foundry model deployment when provisioning Foundry account')
 param deployFoundryModel bool = true

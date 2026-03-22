@@ -16,7 +16,7 @@ async def chat(request: ChatRequest):
     """Send a message to the agent and get a response."""
     try:
         agent_url = f"{AGENT_SERVICE_URL}/agent"
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 agent_url,
                 json={"message": request.message}

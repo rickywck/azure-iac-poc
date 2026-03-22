@@ -26,7 +26,7 @@ param agentsImage string
 param deployFoundry bool = true
 
 @description('Foundry deployment/model name consumed by agents app')
-param foundryModel string = 'gpt-4mini'
+param foundryModel string = 'gpt-5.1-codex-mini'
 
 @description('Key Vault secret name for the PostgreSQL admin password')
 param postgresPasswordSecretName string = 'postgres-admin-password'

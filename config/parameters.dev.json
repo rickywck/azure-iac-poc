@@ -14,9 +14,9 @@
     "backendImage": { "value": "backend:latest" },
     "agentsImage": { "value": "agents:latest" },
     "deployFoundry": { "value": true },
-    "deployFoundryModel": { "value": true },
-    "foundryModel": { "value": "gpt-4mini" },
-    "foundryModelName": { "value": "gpt-4o-mini" },
+    "deployFoundryModel": { "value": false },
+    "foundryModel": { "value": "gpt-5.1-codex-mini" },
+    "foundryModelName": { "value": "gpt-5.1-codex-mini" },
     "foundryModelSkuCapacity": { "value": 10 }
   }
 }

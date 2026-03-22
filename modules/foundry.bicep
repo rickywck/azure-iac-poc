@@ -11,10 +11,10 @@ param skuName string = 'S0'
 param deployModel bool = true
 
 @description('Foundry model deployment name used by the app')
-param modelDeploymentName string = 'gpt-4mini'
+param modelDeploymentName string = 'gpt-5.1-codex-mini'
 
-@description('Foundry model name (for example: gpt-4o-mini)')
-param modelName string = 'gpt-4o-mini'
+@description('Foundry model name (for example: gpt-5.1-codex-mini)')
+param modelName string = 'gpt-5.1-codex-mini'
 
 @description('Deployment SKU name for the model deployment')
 param deploymentSkuName string = 'Standard'

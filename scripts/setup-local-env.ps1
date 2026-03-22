@@ -4,6 +4,7 @@
 param(
     [string]$ResourceGroup = "rg-agentic-poc-dev",
     [string]$Location = "eastus2",
+    [string]$ParametersFile = "config/parameters.dev.json",
     [switch]$SkipPostgresFirewallRule
 )
 
@@ -73,6 +74,16 @@ Write-Host "=== Setting up local development environment ===" -ForegroundColor C
 Write-Host "Resource Group: $ResourceGroup"
 Write-Host ""
 
+$configuredFoundryModelDeploymentName = ''
+if (Test-Path $ParametersFile) {
+    try {
+        $parameterFileData = Get-Content $ParametersFile | ConvertFrom-Json
+        $configuredFoundryModelDeploymentName = $parameterFileData.parameters.foundryModel.value
+    } catch {
+        Write-Warning "Could not parse '$ParametersFile'. Falling back to deployment outputs for Foundry model resolution."
+    }
+}
+
 # Check if Azure CLI is installed
 $azVersion = az version --output json 2>$null | ConvertFrom-Json
 if (-not $azVersion) {
@@ -107,6 +118,10 @@ $appInsightsKey = $outputs.appInsightsInstrumentationKey.value
 $foundryModelDeploymentName = $outputs.foundryModelDeploymentName.value
 $postgresUser = $parameters.postgresAdminUsername.value
 $postgresDb = $parameters.postgresDatabaseName.value
+
+if (-not [string]::IsNullOrWhiteSpace($configuredFoundryModelDeploymentName)) {
+    $foundryModelDeploymentName = $configuredFoundryModelDeploymentName
+}
 
 Write-Host "Deployment details retrieved." -ForegroundColor Green
 Write-Host ""
@@ -178,19 +193,50 @@ Write-Host ""
 
 # Detect model name from deployment
 Write-Host "Detecting Foundry model name..." -ForegroundColor Yellow
-$modelDeployment = az cognitiveservices account deployment show `
+
+$resolvedDeploymentName = az cognitiveservices account deployment show `
     --resource-group $ResourceGroup `
     --name $foundryAccountName `
     --deployment-name $foundryModelDeploymentName `
+    --query "name" `
+    --output tsv 2>$null
+
+if (-not $resolvedDeploymentName) {
+    $resolvedDeploymentName = az cognitiveservices account deployment list `
+        --resource-group $ResourceGroup `
+        --name $foundryAccountName `
+        --query "[?properties.model.name=='$foundryModelDeploymentName'] | [0].name" `
+        --output tsv 2>$null
+}
+
+if (-not $resolvedDeploymentName) {
+    $resolvedDeploymentName = az cognitiveservices account deployment list `
+        --resource-group $ResourceGroup `
+        --name $foundryAccountName `
+        --query "[0].name" `
+        --output tsv 2>$null
+}
+
+if (-not $resolvedDeploymentName) {
+    $resolvedDeploymentName = $foundryModelDeploymentName
+}
+
+$modelDeployment = az cognitiveservices account deployment show `
+    --resource-group $ResourceGroup `
+    --name $foundryAccountName `
+    --deployment-name $resolvedDeploymentName `
     --query "properties.model.name" `
     --output tsv 2>$null
 
 if (-not $modelDeployment) {
-    $modelDeployment = "gpt-4o-mini"  # Fallback
+    $modelDeployment = "gpt-5.1-codex-mini"  # Fallback
     Write-Host "Could not detect model, using default: $modelDeployment" -ForegroundColor Yellow
 } else {
     Write-Host "Detected model: $modelDeployment" -ForegroundColor Green
 }
+
+$foundryModelDeploymentName = $resolvedDeploymentName
+Write-Host "Using Foundry deployment name: $foundryModelDeploymentName" -ForegroundColor Green
 
 Write-Host ""
 

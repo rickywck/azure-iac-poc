@@ -91,6 +91,11 @@ if ($UseExternalFoundry) {
 Write-Host ""
 Write-Host "=== Phase 1: Building and pushing application images ===" -ForegroundColor Cyan
 
+# Use a unique timestamped tag so ARM detects a change and forces Container Apps to pull the new image.
+# Without this, passing the same ':latest' tag causes ARM to treat the resource as unchanged (idempotent no-op).
+$imageTag = Get-Date -Format 'yyyyMMddHHmm'
+Write-Host "Image tag: $imageTag" -ForegroundColor DarkGray
+
 $dockerAvailable = $null
 try {
     $dockerVersion = docker --version 2>$null
@@ -101,10 +106,10 @@ try {
     $dockerAvailable = $false
 }
 
-$images = @(
-    @{ Tag = "$acrLoginServer/ui:latest";      Context = "./sample-app/ui" },
-    @{ Tag = "$acrLoginServer/backend:latest"; Context = "./sample-app/backend" },
-    @{ Tag = "$acrLoginServer/agents:latest";  Context = "./sample-app/agents" }
+$imageNames = @(
+    @{ Name = "ui";      Context = "./sample-app/ui" },
+    @{ Name = "backend"; Context = "./sample-app/backend" },
+    @{ Name = "agents";  Context = "./sample-app/agents" }
 )
 
 if ($dockerAvailable) {
@@ -112,14 +117,17 @@ if ($dockerAvailable) {
     az acr login --name $acrName 2>&1 | Out-Null
 
     if ($LASTEXITCODE -eq 0) {
-        foreach ($img in $images) {
-            Write-Host "Building $($img.Tag)..." -ForegroundColor Yellow
-            docker build -t $img.Tag $img.Context
-            if ($LASTEXITCODE -ne 0) { Write-Host "Build failed for $($img.Tag)" -ForegroundColor Red; exit 1 }
+        foreach ($img in $imageNames) {
+            $taggedImage    = "$acrLoginServer/$($img.Name):$imageTag"
+            $latestImage    = "$acrLoginServer/$($img.Name):latest"
+            Write-Host "Building $taggedImage..." -ForegroundColor Yellow
+            docker build -t $taggedImage -t $latestImage $img.Context
+            if ($LASTEXITCODE -ne 0) { Write-Host "Build failed for $taggedImage" -ForegroundColor Red; exit 1 }
 
-            Write-Host "Pushing $($img.Tag)..." -ForegroundColor Yellow
-            docker push $img.Tag
-            if ($LASTEXITCODE -ne 0) { Write-Host "Push failed for $($img.Tag)" -ForegroundColor Red; exit 1 }
+            Write-Host "Pushing $taggedImage..." -ForegroundColor Yellow
+            docker push $taggedImage
+            if ($LASTEXITCODE -ne 0) { Write-Host "Push failed for $taggedImage" -ForegroundColor Red; exit 1 }
+            docker push $latestImage
         }
     } else {
         $dockerAvailable = $false
@@ -129,18 +137,17 @@ if ($dockerAvailable) {
 if (-not $dockerAvailable) {
     Write-Host "Docker is not available for local build/push. Falling back to az acr build..." -ForegroundColor DarkYellow
 
-    $acrBuilds = @(
-        @{ Tag = "ui:latest";      Context = "./sample-app/ui" },
-        @{ Tag = "backend:latest"; Context = "./sample-app/backend" },
-        @{ Tag = "agents:latest";  Context = "./sample-app/agents" }
-    )
-
-    foreach ($img in $acrBuilds) {
-        Write-Host "Building $($img.Tag) in ACR..." -ForegroundColor Yellow
-        az acr build -r $acrName -t $img.Tag $img.Context
-        if ($LASTEXITCODE -ne 0) { Write-Host "ACR build failed for $($img.Tag)" -ForegroundColor Red; exit 1 }
+    foreach ($img in $imageNames) {
+        Write-Host "Building $($img.Name):$imageTag in ACR..." -ForegroundColor Yellow
+        az acr build -r $acrName -t "$($img.Name):$imageTag" -t "$($img.Name):latest" $img.Context
+        if ($LASTEXITCODE -ne 0) { Write-Host "ACR build failed for $($img.Name)" -ForegroundColor Red; exit 1 }
     }
 }
+
+# Override image params with timestamped tags for Bicep deployment
+$uiImage      = "ui:$imageTag"
+$backendImage = "backend:$imageTag"
+$agentsImage  = "agents:$imageTag"
 
 Write-Host ""
 Write-Host "=== Phase 2: Updating Azure Container Apps ===" -ForegroundColor Cyan

@@ -25,10 +25,16 @@ app.add_middleware(
 )
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=2000)
+    message: str = Field(..., min_length=1, max_length=12000)
 
 class ChatResponse(BaseModel):
     message: str
+    is_calculation: bool = False
+    mode: str = 'direct'
+    direct_response: str = ''
+    code_result: str = ''
+    generated_python: str = ''
+    execution_backend: str = ''
 
 @app.get("/health")
 async def health_check():
@@ -43,14 +49,14 @@ async def chat_endpoint(request: ChatRequest):
     """Process a chat message using the LangChain agent."""
     agent = get_agent()
     response = await agent.chat(request.message)
-    return ChatResponse(message=response)
+    return ChatResponse(**response)
 
 @app.get("/")
 async def root():
     return {
         "message": "Agentic POC Agents Service",
         "version": "0.1.0",
-        "model": os.getenv("FOUNDRY_MODEL", "gpt-4mini")
+        "model": os.getenv("FOUNDRY_MODEL", "gpt-5.1-codex-mini")
     }
 
 

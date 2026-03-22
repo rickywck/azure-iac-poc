@@ -6,8 +6,8 @@ param(
     [string]$Location = "eastus2",
     [string]$TemplateFile = "main.bicep",
     [string]$ParametersFile = "config/parameters.dev.json",
-    [string]$FoundryModelDeploymentName = "gpt-4mini",
-    [string]$FoundryModelName = "gpt-4o-mini",
+    [string]$FoundryModelDeploymentName = "gpt-5.1-codex-mini",
+    [string]$FoundryModelName = "gpt-5.1-codex-mini",
     [int]$FoundryModelCapacity = 10,
     [string[]]$FoundryModelFallbackNames = @("gpt-4.1-mini"),
     [switch]$UseExternalFoundry,
@@ -146,6 +146,16 @@ function Remove-DeletedFoundryAccount {
     return ($LASTEXITCODE -eq 0)
 }
 
+function Test-FoundryDeploymentExists {
+    param(
+        [string]$AccountName,
+        [string]$DeploymentName
+    )
+
+    $existingDeployment = az cognitiveservices account deployment show --resource-group $ResourceGroup --name $AccountName --deployment-name $DeploymentName --query name --output tsv 2>$null
+    return -not [string]::IsNullOrWhiteSpace($existingDeployment)
+}
+
 function New-DeploymentOverrideFile {
     param(
         [hashtable]$ParameterValues
@@ -265,14 +275,15 @@ Write-Host "(This may take 10-15 minutes)" -ForegroundColor Gray
 function Invoke-InfraDeployment {
     param(
         [string]$ModelName,
-        [bool]$IncludeContainerApps = $false
+        [bool]$IncludeContainerApps = $false,
+        [bool]$DeployModel = $true
     )
 
     $overridePath = New-DeploymentOverrideFile -ParameterValues @{
         postgresAdminPassword = $postgresPasswordPlain
         postgresPasswordSecretName = $postgresPasswordSecretName
         deployFoundry = $deployFoundry
-        deployFoundryModel = $true
+        deployFoundryModel = $DeployModel
         foundryModel = $FoundryModelDeploymentName
         foundryModelName = $ModelName
         foundryModelSkuCapacity = $FoundryModelCapacity
@@ -309,6 +320,11 @@ $infraOutput = $null
 $successfulModelName = $null
 
 if (-not $UseExternalFoundry) {
+    if (Test-FoundryDeploymentExists -AccountName $foundryAccountName -DeploymentName $FoundryModelDeploymentName) {
+        Write-Host "Using existing Foundry model deployment '$FoundryModelDeploymentName'." -ForegroundColor Green
+        $infraOutput = Invoke-InfraDeployment -ModelName $FoundryModelName -IncludeContainerApps $false -DeployModel $false
+        $successfulModelName = $FoundryModelName
+    } else {
     $modelCandidates = @($FoundryModelName) + $FoundryModelFallbackNames
     $modelCandidates = $modelCandidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
 
@@ -336,8 +352,9 @@ if (-not $UseExternalFoundry) {
 
         Write-Host "Model '$candidateModel' not available, trying next fallback..." -ForegroundColor DarkYellow
     }
+    }
 } else {
-    $infraOutput = Invoke-InfraDeployment -ModelName $FoundryModelName -IncludeContainerApps $false
+    $infraOutput = Invoke-InfraDeployment -ModelName $FoundryModelName -IncludeContainerApps $false -DeployModel $false
 }
 
 if ($LASTEXITCODE -ne 0) {

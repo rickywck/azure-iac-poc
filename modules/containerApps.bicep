@@ -76,7 +76,7 @@ param openaiApiKey string
 param foundryEndpoint string
 
 @description('Foundry deployment/model name')
-param foundryModel string = 'gpt-4mini'
+param foundryModel string = 'gpt-5.1-codex-mini'
 
 @description('LangSmith API key')
 @secure()
