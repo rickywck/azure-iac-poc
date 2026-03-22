@@ -1,5 +1,4 @@
-from langchain_openai import AzureChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from openai import AsyncAzureOpenAI
 import os
 
 class FoundryAgent:
@@ -10,28 +9,30 @@ class FoundryAgent:
         self.api_key = os.getenv("FOUNDRY_API_KEY", "")
         self.model = os.getenv("FOUNDRY_MODEL", "gpt-4mini")
 
-        # Parse endpoint to get base URL and deployment
-        # Expected format: https://<resource>.openai.azure.com/
-        base_url = self.endpoint.rstrip("/")
-        if not base_url.endswith("/openai"):
-            base_url = f"{base_url}/openai"
-
-        self.llm = AzureChatOpenAI(
-            azure_endpoint=base_url,
+        self.client = AsyncAzureOpenAI(
+            azure_endpoint=self.endpoint,
             api_key=self.api_key,
-            api_version="2024-02-15-preview",
-            deployment_name=self.model,
-            temperature=0.7
+            api_version="2024-02-15-preview"
         )
 
     async def chat(self, message: str) -> str:
         """Send a message to the LLM and get a response."""
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content="You are a helpful AI assistant. Respond concisely and helpfully."),
-                HumanMessage(content=message)
-            ])
-            return response.content
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                temperature=0.7,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a helpful AI assistant. Respond concisely and helpfully."
+                    },
+                    {
+                        "role": "user",
+                        "content": message
+                    }
+                ]
+            )
+            return response.choices[0].message.content or ""
         except Exception as e:
             return f"Error: Unable to get response from Foundry. Details: {str(e)}"
 

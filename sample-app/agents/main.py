@@ -1,9 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 import os
+import uvicorn
 
 from agent import get_agent
+
+load_dotenv()
 
 app = FastAPI(
     title="Agentic POC Agents Service",
@@ -30,6 +34,10 @@ class ChatResponse(BaseModel):
 async def health_check():
     return {"status": "healthy", "service": "agents"}
 
+@app.get("/ready")
+async def readiness_check():
+    return {"status": "ready", "service": "agents"}
+
 @app.post("/agent", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     """Process a chat message using the LangChain agent."""
@@ -44,3 +52,7 @@ async def root():
         "version": "0.1.0",
         "model": os.getenv("FOUNDRY_MODEL", "gpt-4mini")
     }
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "8001")), reload=False)

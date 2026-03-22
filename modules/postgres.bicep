@@ -57,7 +57,8 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-pr
 
 // Firewall rule to allow Azure services
 resource firewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01-preview' = if (allowAzureServices) {
-  name: '${serverName}/AllowAllAzureServices'
+  parent: postgresServer
+  name: 'AllowAllAzureServices'
   properties: {
     startIpAddress: '0.0.0.0'
     endIpAddress: '0.0.0.0'
@@ -65,7 +66,8 @@ resource firewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2
 }
 
 resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-12-01-preview' = {
-  name: '${serverName}/${databaseName}'
+  parent: postgresServer
+  name: databaseName
   properties: {
     charset: 'UTF8'
     collation: 'en_US.UTF8'

@@ -25,3 +25,8 @@ resource acrResource 'Microsoft.ContainerRegistry/registries@2023-01-01-preview'
 
 output loginServer string = acrResource.properties.loginServer
 output name string = acrName
+
+@secure()
+output adminUsername string = acrResource.listCredentials().username
+@secure()
+output adminPassword string = acrResource.listCredentials().passwords[0].value

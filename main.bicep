@@ -31,16 +31,40 @@ param backendImage string
 @description('Agents container image')
 param agentsImage string
 
+@description('Deploy Azure AI Foundry/OpenAI account as part of this template')
+param deployFoundry bool = true
+
+@description('Foundry account SKU tier')
+param foundrySku string = 'S0'
+
+@description('Foundry model/deployment name consumed by agents app')
+param foundryModel string = 'gpt-4mini'
+
+@description('Foundry model name to deploy in the account (for example: gpt-4o-mini)')
+param foundryModelName string = 'gpt-4o-mini'
+
+@description('Deploy a Foundry model deployment when provisioning Foundry account')
+param deployFoundryModel bool = true
+
+@description('Foundry model deployment SKU name')
+param foundryModelSkuName string = 'Standard'
+
+@description('Foundry model deployment SKU capacity')
+param foundryModelSkuCapacity int = 10
+
 @description('PostgreSQL admin password (secure)')
 @secure()
 param postgresAdminPassword string
 
 @description('Foundry API key (secure)')
 @secure()
-param foundryApiKey string
+param foundryApiKey string = ''
 
 @description('Foundry endpoint URL')
-param foundryEndpoint string
+param foundryEndpoint string = ''
+
+@description('Deploy Container Apps (set false to deploy infra only before images are pushed)')
+param deployContainerApps bool = true
 
 // Unique resource name generation
 var acrName = take('${resourceNamePrefix}acr', 50) // ACR max 50 chars, must be alphanumeric
@@ -50,6 +74,7 @@ var containerAppsEnvName = '${resourceNamePrefix}-env'
 var containerAppUIName = '${resourceNamePrefix}-ui'
 var containerAppAgentsName = '${resourceNamePrefix}-agents'
 var appInsightsName = '${resourceNamePrefix}-ai'
+var foundryAccountName = toLower(take('${resourceNamePrefix}foundry', 24))
 
 // Tags
 var tags = {
@@ -102,55 +127,78 @@ module monitorModule 'modules/monitor.bicep' = {
   }
 }
 
-module containerAppsModule 'modules/containerApps.bicep' = {
+module foundryModule 'modules/foundry.bicep' = if (deployFoundry) {
+  name: 'foundryDeployment'
+  params: {
+    location: location
+    accountName: foundryAccountName
+    skuName: foundrySku
+    deployModel: deployFoundryModel
+    modelDeploymentName: foundryModel
+    modelName: foundryModelName
+    deploymentSkuName: foundryModelSkuName
+    deploymentSkuCapacity: foundryModelSkuCapacity
+    tags: tags
+  }
+}
+
+#disable-next-line BCP318
+var resolvedFoundryApiKey = deployFoundry ? foundryModule.outputs.apiKey : foundryApiKey
+#disable-next-line BCP318
+var resolvedFoundryEndpoint = deployFoundry ? foundryModule.outputs.endpoint : foundryEndpoint
+
+module containerAppsModule 'modules/containerApps.bicep' = if (deployContainerApps) {
   name: 'containerAppsDeployment'
   params: {
     location: location
-    environmentName: containerAppsEnvName
-    uiAppName: containerAppUIName
-    agentsAppName: containerAppAgentsName
+    containerAppUIName: containerAppUIName
+    containerAppAgentsName: containerAppAgentsName
+    containerAppsEnvironmentName: containerAppsEnvName
+    logAnalyticsWorkspaceId: monitorModule.outputs.logAnalyticsCustomerId
+    logAnalyticsSharedKey: monitorModule.outputs.logAnalyticsSharedKey
     acrLoginServer: acrModule.outputs.loginServer
-    acrName: acrName
-    uiImage: uiImage
-    backendImage: backendImage
-    agentsImage: agentsImage
+    acrUsername: acrModule.outputs.adminUsername
+    acrPassword: acrModule.outputs.adminPassword
+    uiImageName: uiImage
+    backendImageName: backendImage
+    agentsImageName: agentsImage
     postgresHost: postgresModule.outputs.host
-    postgresDatabaseName: postgresDatabaseName
+    postgresDatabase: postgresDatabaseName
     postgresUsername: postgresAdminUsername
     postgresPassword: postgresAdminPassword
     storageAccountName: storageAccountName
+    storageContainerName: storageContainerName
+    storageAccountKey: storageModule.outputs.primaryKey
     appInsightsConnectionString: monitorModule.outputs.connectionString
-    foundryApiKey: foundryApiKey
-    foundryEndpoint: foundryEndpoint
+    openaiApiKey: resolvedFoundryApiKey
+    foundryEndpoint: resolvedFoundryEndpoint
+    foundryModel: foundryModel
+    langSmithApiKey: resolvedFoundryApiKey
     tags: tags
   }
-  dependsOn: [
-    acrModule
-    postgresModule
-    storageModule
-    monitorModule
-  ]
 }
 
-module managedIdentitiesModule 'modules/managedIdentities.bicep' = {
+module managedIdentitiesModule 'modules/managedIdentities.bicep' = if (deployContainerApps) {
   name: 'managedIdentitiesDeployment'
   params: {
-    containerAppUIIdentityId: containerAppsModule.outputs.uiIdentityId
-    containerAppAgentsIdentityId: containerAppsModule.outputs.agentsIdentityId
+    #disable-next-line BCP318
+    containerAppUIIdentityId: containerAppsModule.outputs.containerAppUIIdentityId
+    #disable-next-line BCP318
+    containerAppAgentsIdentityId: containerAppsModule.outputs.containerAppAgentsIdentityId
     storageAccountName: storageAccountName
-    resourceGroupName: resourceGroup().name
   }
-  dependsOn: [
-    containerAppsModule
-    storageModule
-  ]
 }
 
 // Outputs
 output acrLoginServer string = acrModule.outputs.loginServer
 output acrName string = acrName
-output uiAppURL string = containerAppsModule.outputs.uiAppURL
-output agentsAppURL string = containerAppsModule.outputs.agentsAppURL
+#disable-next-line BCP318
+output uiAppURL string = deployContainerApps ? containerAppsModule.outputs.containerAppUIFqdn : ''
+#disable-next-line BCP318
+output agentsAppURL string = deployContainerApps ? containerAppsModule.outputs.containerAppAgentsFqdn : ''
 output postgresHost string = postgresModule.outputs.host
 output storageAccountName string = storageAccountName
 output appInsightsInstrumentationKey string = monitorModule.outputs.instrumentationKey
+output foundryEndpoint string = resolvedFoundryEndpoint
+output foundryAccountName string = deployFoundry ? foundryAccountName : 'external-foundry'
+output foundryModelDeploymentName string = foundryModel

@@ -9,7 +9,7 @@ from models import ChatRequest, ChatResponse
 router = APIRouter()
 
 # Environment variables
-AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://localhost:8000")
+AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://localhost:8001")
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):

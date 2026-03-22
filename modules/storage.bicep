@@ -35,3 +35,6 @@ resource blobContainer 'Microsoft.Storage/storageAccounts/blobServices/container
 output name string = storageAccount.name
 output primaryEndpoint string = storageAccount.properties.primaryEndpoints.blob
 output id string = storageAccount.id
+
+@secure()
+output primaryKey string = storageAccount.listKeys().keys[0].value

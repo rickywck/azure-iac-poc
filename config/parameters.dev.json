@@ -2,16 +2,21 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "location": { "value": "eastus" },
-    "resourceNamePrefix": { "value": "agenticpocdev" },
+    "location": { "value": "eastus2" },
+    "resourceNamePrefix": { "value": "agenticpocdev2" },
     "postgresAdminUsername": { "value": "pocadmin" },
     "postgresDatabaseName": { "value": "agentdb" },
-    "postgresSku": { "value": "B_Burstable_B1ms" },
+    "postgresSku": { "value": "Standard_B1ms" },
     "postgresVersion": { "value": "15" },
     "storageContainerName": { "value": "agent-data" },
     "acrSku": { "value": "Standard" },
     "uiImage": { "value": "ui:latest" },
     "backendImage": { "value": "backend:latest" },
-    "agentsImage": { "value": "agents:latest" }
+    "agentsImage": { "value": "agents:latest" },
+    "deployFoundry": { "value": true },
+    "deployFoundryModel": { "value": true },
+    "foundryModel": { "value": "gpt-4mini" },
+    "foundryModelName": { "value": "gpt-4o-mini" },
+    "foundryModelSkuCapacity": { "value": 10 }
   }
 }

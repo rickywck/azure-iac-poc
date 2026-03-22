@@ -7,9 +7,6 @@ param containerAppAgentsIdentityId string
 @description('Storage account name')
 param storageAccountName string
 
-@description('Resource group name')
-param resourceGroupName string
-
 // Storage account resource reference
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   name: storageAccountName

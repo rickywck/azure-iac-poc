@@ -1,9 +1,6 @@
 @description('Resource location')
 param location string
 
-@description('Environment name')
-param environmentName string
-
 @description('UI+Backend Container App name')
 param containerAppUIName string
 
@@ -13,11 +10,11 @@ param containerAppAgentsName string
 @description('Container Apps Environment name')
 param containerAppsEnvironmentName string
 
-@description('Resource group name')
-param resourceGroupName string
-
 @description('Log Analytics workspace ID')
 param logAnalyticsWorkspaceId string
+
+@secure()
+param logAnalyticsSharedKey string
 
 @description('ACR login server')
 param acrLoginServer string
@@ -73,6 +70,12 @@ param agentsImageName string = 'agents:latest'
 @secure()
 param openaiApiKey string
 
+@description('Foundry endpoint URL')
+param foundryEndpoint string
+
+@description('Foundry deployment/model name')
+param foundryModel string = 'gpt-4mini'
+
 @description('LangSmith API key')
 @secure()
 param langSmithApiKey string
@@ -86,6 +89,7 @@ resource containerAppsEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId: logAnalyticsWorkspaceId
+        sharedKey: logAnalyticsSharedKey
       }
     }
   }
@@ -183,9 +187,9 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
                 port: 80
                 path: '/'
               }
-              initialDelay: 10
-              period: 10
-              timeout: 5
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              timeoutSeconds: 5
               failureThreshold: 3
             }
             {
@@ -194,9 +198,9 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
                 port: 80
                 path: '/'
               }
-              initialDelay: 5
-              period: 5
-              timeout: 3
+              initialDelaySeconds: 5
+              periodSeconds: 5
+              timeoutSeconds: 3
               failureThreshold: 3
             }
           ]
@@ -219,7 +223,7 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
               value: '5432'
             }
             {
-              name: 'POSTGRES_DATABASE'
+              name: 'POSTGRES_DB'
               value: postgresDatabase
             }
             {
@@ -231,6 +235,14 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
               secretRef: 'postgres-password'
             }
             {
+              name: 'POSTGRES_SSLMODE'
+              value: 'require'
+            }
+            {
+              name: 'AGENT_SERVICE_URL'
+              value: 'https://${containerAppAgents.properties.latestRevisionFqdn}'
+            }
+            {
               name: 'STORAGE_ACCOUNT_NAME'
               value: storageAccountName
             }
@@ -239,7 +251,7 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
               value: storageContainerName
             }
             {
-              name: 'AZURE_STORAGE_KEY'
+              name: 'STORAGE_ACCOUNT_KEY'
               secretRef: 'storage-key'
             }
             {
@@ -254,9 +266,9 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
                 port: 8000
                 path: '/health'
               }
-              initialDelay: 30
-              period: 15
-              timeout: 10
+              initialDelaySeconds: 30
+              periodSeconds: 15
+              timeoutSeconds: 10
               failureThreshold: 3
             }
             {
@@ -265,9 +277,9 @@ resource containerAppUI 'Microsoft.App/containerApps@2023-05-01' = {
                 port: 8000
                 path: '/ready'
               }
-              initialDelay: 10
-              period: 10
-              timeout: 5
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              timeoutSeconds: 5
               failureThreshold: 3
             }
           ]
@@ -307,6 +319,16 @@ resource containerAppAgents 'Microsoft.App/containerApps@2023-05-01' = {
     managedEnvironmentId: containerAppsEnv.id
     configuration: {
       activeRevisionsMode: 'Single'
+      ingress: {
+        external: false
+        targetPort: 8000
+        traffic: [
+          {
+            weight: 100
+            latestRevision: true
+          }
+        ]
+      }
       secrets: [
         {
           name: 'acr-password'
@@ -352,40 +374,20 @@ resource containerAppAgents 'Microsoft.App/containerApps@2023-05-01' = {
           }
           env: [
             {
-              name: 'POSTGRES_HOST'
-              value: postgresHost
-            }
-            {
-              name: 'POSTGRES_PORT'
-              value: '5432'
-            }
-            {
-              name: 'POSTGRES_DATABASE'
-              value: postgresDatabase
-            }
-            {
-              name: 'POSTGRES_USER'
-              value: postgresUsername
-            }
-            {
-              name: 'POSTGRES_PASSWORD'
-              secretRef: 'postgres-password'
-            }
-            {
-              name: 'STORAGE_ACCOUNT_NAME'
-              value: storageAccountName
-            }
-            {
-              name: 'STORAGE_CONTAINER_NAME'
-              value: storageContainerName
-            }
-            {
-              name: 'AZURE_STORAGE_KEY'
-              secretRef: 'storage-key'
+              name: 'FOUNDRY_API_KEY'
+              secretRef: 'openai-key'
             }
             {
               name: 'OPENAI_API_KEY'
               secretRef: 'openai-key'
+            }
+            {
+              name: 'FOUNDRY_ENDPOINT'
+              value: foundryEndpoint
+            }
+            {
+              name: 'FOUNDRY_MODEL'
+              value: foundryModel
             }
             {
               name: 'LANGCHAIN_API_KEY'
@@ -404,23 +406,23 @@ resource containerAppAgents 'Microsoft.App/containerApps@2023-05-01' = {
             {
               type: 'Liveness'
               httpGet: {
-                port: 8001
+                port: 8000
                 path: '/health'
               }
-              initialDelay: 30
-              period: 15
-              timeout: 10
+              initialDelaySeconds: 30
+              periodSeconds: 15
+              timeoutSeconds: 10
               failureThreshold: 3
             }
             {
               type: 'Readiness'
               httpGet: {
-                port: 8001
+                port: 8000
                 path: '/ready'
               }
-              initialDelay: 10
-              period: 10
-              timeout: 5
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              timeoutSeconds: 5
               failureThreshold: 3
             }
           ]
@@ -451,5 +453,5 @@ output containerAppUIId string = containerAppUI.id
 output containerAppAgentsId string = containerAppAgents.id
 output containerAppUIIdentityId string = containerAppUIIdentity.properties.principalId
 output containerAppAgentsIdentityId string = containerAppAgentsIdentity.properties.principalId
-output containerAppUIFqdn string = containerAppUI.properties.configuration.ingress.fqdn
-output containerAppAgentsFqdn string = containerAppAgents.properties.configuration.ingress.fqdn
+output containerAppUIFqdn string = containerAppUI.properties.latestRevisionFqdn
+output containerAppAgentsFqdn string = containerAppAgents.properties.latestRevisionFqdn
