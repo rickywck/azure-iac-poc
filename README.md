@@ -1,156 +1,209 @@
 # Agentic POC - Azure IAC
 
-Proof of Concept for deploying an agentic application to Azure Container Apps using Bicep infrastructure as code.
+Proof of concept for deploying a split-workload agentic application to Azure Container Apps using Bicep.
 
 ## Architecture
 
-```
+The application is intentionally split into two independently deployable workloads:
+
+- `UI+Backend` Container App
+  - React UI served by Nginx
+  - FastAPI backend for CRUD and orchestration
+  - does not call Foundry directly for agentic work
+- `Agents` Container App
+  - FastAPI agent service
+  - owns Foundry/OpenAI integration
+  - can be scaled and deployed independently from the UI+Backend app
+
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Azure Container Apps Environment             │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────────────┐         ┌──────────────────────┐     │
-│  │ Container App #1     │         │ Container App #2     │     │
-│  │   React UI (Nginx)   │         │   LangChain Agents   │     │
-│  │   FastAPI Backend   │         │   (Python)           │     │
-│  └──────────────────────┘         └──────────────────────┘     │
-│           │                                  │                    │
-└───────────┼──────────────────────────────────┼────────────────┘
-            │                                  │
-            ▼                                  ▼
+│                                                                 │
+│  ┌─────────────────────────┐      ┌──────────────────────────┐  │
+│  │ Container App #1        │      │ Container App #2         │  │
+│  │ UI + FastAPI Backend    │ ---> │ Agents Service           │  │
+│  │ React + Nginx + API     │      │ FastAPI + Foundry/OpenAI │  │
+│  └─────────────────────────┘      └──────────────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Azure Services                            │
-│  ACR │ PostgreSQL │ Storage │ App Insights │ Foundry (AI)      │
+│ Azure Services: ACR, PostgreSQL, Storage, App Insights, Foundry│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
-- [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli) installed and authenticated
-- [Docker](https://docs.docker.com/get-docker/) installed
-- Microsoft Foundry API key and endpoint
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed and authenticated
+- [Docker Desktop](https://docs.docker.com/get-docker/) installed for local container runs and local image builds
+- Access to an Azure subscription that can deploy:
+  - Azure Container Apps
+  - Azure Container Registry
+  - Azure Database for PostgreSQL Flexible Server
+  - Azure AI Foundry / Azure OpenAI
 
-## Quick Start
+## Deployment Workflows
 
-### 1. Deploy Infrastructure
+### Full Infrastructure + App Deployment
 
-```bash
-# Set environment variables
-export POSTGRES_PASSWORD="YourSecurePassword123!"
-export FOUNDRY_API_KEY="your-foundry-api-key"
-export FOUNDRY_ENDPOINT="https://your-resource.openai.azure.com/"
+Use this when provisioning the environment for the first time or when infrastructure changes are required.
 
-# Deploy
-./scripts/deploy.sh
+```powershell
+cd C:\Users\ricky\poc\azure-iac
+.\scripts\deploy.ps1
+```
+
+This flow:
+
+- creates or updates the resource group
+- deploys infrastructure resources
+- builds and pushes the `ui`, `backend`, and `agents` images
+- deploys both Container Apps
+
+### App-Only Deployment
+
+Use this when infrastructure is already in place and you only want to push updated application code to Azure Container Apps.
+
+```powershell
+cd C:\Users\ricky\poc\azure-iac
+.\scripts\deploy-app.ps1
+```
+
+This flow:
+
+- rebuilds and pushes the current application images
+- updates only the Container Apps layer
+- does not redeploy ACR, PostgreSQL, Storage, Monitor, or Foundry infrastructure
+
+### External Foundry Mode
+
+If you want to use an existing Foundry/OpenAI resource instead of the repo-managed one:
+
+```powershell
+.\scripts\deploy.ps1 -UseExistingFoundry
+```
+
+or
+
+```powershell
+.\scripts\deploy-app.ps1 -UseExistingFoundry
+```
+
+## Accessing the Azure Application
+
+After deployment, the script prints the Container App URLs.
+
+Use the `UI+Backend URL` as the application entry point.
+
+You can also query outputs manually:
+
+```powershell
+az deployment group show `
+  --resource-group rg-agentic-poc-dev `
+  --name main `
+  --query properties.outputs `
+  --output json
+```
+
+## Local Development
+
+### Generate Local Environment Files
+
+Generate `.env` files from the deployed Azure resources:
+
+```powershell
+cd C:\Users\ricky\poc\azure-iac
+.\scripts\setup-local-env.ps1 -ResourceGroup rg-agentic-poc-dev -PostgresPassword "YourPostgresPassword"
 ```
 
 This creates:
-- Resource group: `rg-agentic-poc-dev`
-- Azure Container Registry
-- PostgreSQL Flexible Server
-- Storage Account
-- Application Insights
-- Container Apps Environment + 2 Container Apps
 
-### 2. Build and Push Images
+- `sample-app/backend/.env`
+- `sample-app/agents/.env`
+- `sample-app/ui/.env`
 
-```bash
-# Get ACR name from deployment output
-ACR_NAME="agenticpocdevacr"  # Replace with actual name from deployment
+### Run the Full App Locally with Docker Compose
 
-# Login to ACR
-az acr login --name $ACR_NAME
+This is the preferred local workflow because it mirrors the deployed two-app architecture.
 
-# Build and push images
-docker build -t $ACR_NAME.azurecr.io/ui:latest ./sample-app/ui
-docker build -t $ACR_NAME.azurecr.io/backend:latest ./sample-app/backend
-docker build -t $ACR_NAME.azurecr.io/agents:latest ./sample-app/agents
-
-docker push $ACR_NAME.azurecr.io/ui:latest
-docker push $ACR_NAME.azurecr.io/backend:latest
-docker push $ACR_NAME.azurecr.io/agents:latest
+```powershell
+cd C:\Users\ricky\poc\azure-iac
+docker compose up --build
 ```
 
-### 3. Validate Deployment
+Endpoints:
 
-```bash
-./scripts/validate.sh
+- UI: `http://localhost:8080`
+- Backend API: `http://localhost:8000`
+- Agents service: `http://localhost:8001`
+
+Stop the local stack:
+
+```powershell
+docker compose down
 ```
-
-### 4. Access the Application
-
-Get the URLs from the deployment output or run:
-```bash
-az deployment group show \
-  --resource-group rg-agentic-poc-dev \
-  --name main.bicep \
-  --query properties.outputs.uiAppURL.value \
-  --output tsv
-```
-
-Open the URL in your browser to access:
-- **Tasks Tab**: Create and manage tasks (CRUD)
-- **Agent Chat**: Chat with the AI agent powered by gpt-4mini
 
 ## Sample Application
 
 ### Features
 
-- **Tasks CRUD**: Create, read, update, delete tasks with status tracking
-- **Agent Chat**: Real-time chat interface with LangChain agents
-- **Azure Integration**: PostgreSQL, Storage, Application Insights
+- Tasks CRUD with PostgreSQL persistence
+- Agent chat routed from backend to dedicated agents service
+- Explicit split between transactional/backend workload and agentic workload
+- Azure integrations for PostgreSQL, Storage, App Insights, and Foundry
 
 ### Tech Stack
 
-- **Frontend**: React + Vite, vanilla CSS
-- **Backend**: FastAPI, SQLAlchemy, asyncpg
-- **Agents**: LangChain, Azure OpenAI (Foundry)
-- **Infrastructure**: Bicep, Azure Container Apps
+- Frontend: React + Vite
+- UI container: Nginx
+- Backend: FastAPI, SQLAlchemy, asyncpg
+- Agents: FastAPI, Azure OpenAI client
+- Infrastructure: Bicep, Azure Container Apps
 
-## Development
+## Operational Notes
 
-### Local Development
+- The backend and agents workloads are intentionally separated so they can be:
+  - independently updated
+  - independently scaled
+  - independently troubleshot
+- The backend does not depend on LangChain.
+- The agentic workload is isolated in the agents service.
+- `deploy.ps1` is the full environment deployment path.
+- `deploy-app.ps1` is the faster application-only update path.
 
-```bash
-# UI
-cd sample-app/ui
-npm install
-npm run dev
+## Validation and Logs
 
-# Backend
-cd sample-app/backend
-pip install -r requirements.txt
-uvicorn main:app --reload
+Validate the Bicep templates:
 
-# Agents
-cd sample-app/agents
-pip install -r requirements.txt
-uvicorn main:app --reload
+```powershell
+az bicep build --file main.bicep
+az bicep build --file app-update.bicep
 ```
 
-### Running Tests
+Tail Azure Container App logs:
 
-```bash
-# Backend tests
-cd sample-app/backend
-pytest tests/
+```powershell
+az containerapp logs show --resource-group rg-agentic-poc-dev --name agenticpocdev2-ui --follow
+```
 
-# Agents tests
-cd sample-app/agents
-pytest tests/
+```powershell
+az containerapp logs show --resource-group rg-agentic-poc-dev --name agenticpocdev2-agents --follow
 ```
 
 ## Cleanup
 
-```bash
-# Delete resource group and all resources
+Delete the Azure environment:
+
+```powershell
 az group delete --name rg-agentic-poc-dev --yes --no-wait
 ```
 
 ## Documentation
 
-- [Design Spec](docs/superpowers/specs/2026-03-21-agentic-poc-azure-iac-design.md)
-- [Implementation Plan](docs/superpowers/plans/2026-03-21-agentic-poc-azure-iac-implementation.md)
+- [Design Spec](c:/Users/ricky/poc/azure-iac/docs/superpowers/specs/2026-03-21-agentic-poc-azure-iac-design.md)
+- [Implementation Plan](c:/Users/ricky/poc/azure-iac/docs/superpowers/plans/2026-03-21-agentic-poc-azure-iac-implementation.md)
 
 ## Cost Estimates (Dev Environment, Monthly)
 
@@ -161,7 +214,7 @@ az group delete --name rg-agentic-poc-dev --yes --no-wait
 | PostgreSQL B1ms | Burstable | $15-20 |
 | Storage Account | LRS | <$2 |
 | App Insights | Pay-per-use | Minimal |
-| **Total** | | ~$25-80/month |
+| Total |  | ~$25-80/month |
 
 ## License
 
