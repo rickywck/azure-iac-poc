@@ -1,5 +1,5 @@
-# Azure Container Apps Application-Only Deployment Script for Windows
-# Run: .\scripts\deploy-app.ps1
+# Azure Container Apps Application-Only Deployment Script (ACR Build)
+# Run: .\scripts\deploy-app-acr.ps1
 
 param(
     [string]$ResourceGroup = "rg-agentic-poc-dev",
@@ -62,7 +62,7 @@ if (-not $acrLoginServer) {
     exit 1
 }
 
-Write-Host "=== Azure App-Only Deployment ===" -ForegroundColor Cyan
+Write-Host "=== Azure App-Only Deployment (ACR Build) ===" -ForegroundColor Cyan
 Write-Host "Resource Group: $ResourceGroup"
 Write-Host "Location: $Location"
 Write-Host "ACR: $acrName"
@@ -89,56 +89,20 @@ if ($UseExternalFoundry) {
 }
 
 Write-Host ""
-Write-Host "=== Phase 1: Building and pushing application images ===" -ForegroundColor Cyan
+Write-Host "=== Phase 1: Building and pushing application images in ACR ===" -ForegroundColor Cyan
 
-$dockerAvailable = $null
-try {
-    $dockerVersion = docker --version 2>$null
-    if ($LASTEXITCODE -eq 0 -and $dockerVersion) {
-        $dockerAvailable = $true
-    }
-} catch {
-    $dockerAvailable = $false
-}
-
-$images = @(
-    @{ Tag = "$acrLoginServer/ui:latest";      Context = "./sample-app/ui" },
-    @{ Tag = "$acrLoginServer/backend:latest"; Context = "./sample-app/backend" },
-    @{ Tag = "$acrLoginServer/agents:latest";  Context = "./sample-app/agents" }
+$acrBuilds = @(
+    @{ Tag = "ui:latest";      Context = "./sample-app/ui" },
+    @{ Tag = "backend:latest"; Context = "./sample-app/backend" },
+    @{ Tag = "agents:latest";  Context = "./sample-app/agents" }
 )
 
-if ($dockerAvailable) {
-    Write-Host "Logging into ACR: $acrLoginServer" -ForegroundColor Yellow
-    az acr login --name $acrName 2>&1 | Out-Null
-
-    if ($LASTEXITCODE -eq 0) {
-        foreach ($img in $images) {
-            Write-Host "Building $($img.Tag)..." -ForegroundColor Yellow
-            docker build -t $img.Tag $img.Context
-            if ($LASTEXITCODE -ne 0) { Write-Host "Build failed for $($img.Tag)" -ForegroundColor Red; exit 1 }
-
-            Write-Host "Pushing $($img.Tag)..." -ForegroundColor Yellow
-            docker push $img.Tag
-            if ($LASTEXITCODE -ne 0) { Write-Host "Push failed for $($img.Tag)" -ForegroundColor Red; exit 1 }
-        }
-    } else {
-        $dockerAvailable = $false
-    }
-}
-
-if (-not $dockerAvailable) {
-    Write-Host "Docker is not available for local build/push. Falling back to az acr build..." -ForegroundColor DarkYellow
-
-    $acrBuilds = @(
-        @{ Tag = "ui:latest";      Context = "./sample-app/ui" },
-        @{ Tag = "backend:latest"; Context = "./sample-app/backend" },
-        @{ Tag = "agents:latest";  Context = "./sample-app/agents" }
-    )
-
-    foreach ($img in $acrBuilds) {
-        Write-Host "Building $($img.Tag) in ACR..." -ForegroundColor Yellow
-        az acr build -r $acrName -t $img.Tag $img.Context
-        if ($LASTEXITCODE -ne 0) { Write-Host "ACR build failed for $($img.Tag)" -ForegroundColor Red; exit 1 }
+foreach ($img in $acrBuilds) {
+    Write-Host "Building $($img.Tag) in ACR..." -ForegroundColor Yellow
+    az acr build -r $acrName -t $img.Tag $img.Context
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ACR build failed for $($img.Tag)" -ForegroundColor Red
+        exit 1
     }
 }
 

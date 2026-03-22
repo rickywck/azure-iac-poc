@@ -10,9 +10,29 @@ param(
     [string]$FoundryModelName = "gpt-4o-mini",
     [int]$FoundryModelCapacity = 10,
     [string[]]$FoundryModelFallbackNames = @("gpt-4.1-mini"),
-    [switch]$UseExistingFoundry,
+    [switch]$UseExternalFoundry,
+    [string]$ExternalFoundryEndpoint = '',
+    [string]$ExternalFoundryApiKey = '',
     [switch]$PurgeDeletedFoundryAccount
 )
+
+function Convert-SecureStringToPlainText {
+    param([Security.SecureString]$SecureValue)
+
+    if (-not $SecureValue) {
+        return ''
+    }
+
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+    try {
+        return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    }
+    finally {
+        if ($bstr -ne [IntPtr]::Zero) {
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+    }
+}
 
 function New-GeneratedPassword {
     param([int]$Length = 32)
@@ -200,11 +220,20 @@ $deployFoundry = $true
 $foundryApiKeyPlain = ""
 $foundryEndpoint = ""
 
-if ($UseExistingFoundry) {
+if ($UseExternalFoundry) {
     $deployFoundry = $false
-    $foundryApiKey = Read-Host "Enter existing Microsoft Foundry API key" -AsSecureString
-    $foundryApiKeyPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($foundryApiKey))
-    $foundryEndpoint = Read-Host "Enter existing Microsoft Foundry endpoint (e.g., https://your-resource.openai.azure.com/)"
+    $foundryApiKeyPlain = $ExternalFoundryApiKey.Trim()
+    $foundryEndpoint = $ExternalFoundryEndpoint.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($foundryApiKeyPlain)) {
+        Write-Error "-ExternalFoundryApiKey is required when -UseExternalFoundry is specified."
+        exit 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($foundryEndpoint)) {
+        Write-Error "-ExternalFoundryEndpoint is required when -UseExternalFoundry is specified."
+        exit 1
+    }
 } elseif (Test-DeletedFoundryAccount -AccountName $foundryAccountName -AccountLocation $Location) {
     if ($PurgeDeletedFoundryAccount) {
         Write-Host "Purging soft-deleted Foundry account '$foundryAccountName' in '$Location'..." -ForegroundColor Yellow
@@ -279,7 +308,7 @@ Write-Host "(ACR, PostgreSQL, Storage, Monitor, Foundry)" -ForegroundColor Gray
 $infraOutput = $null
 $successfulModelName = $null
 
-if (-not $UseExistingFoundry) {
+if (-not $UseExternalFoundry) {
     $modelCandidates = @($FoundryModelName) + $FoundryModelFallbackNames
     $modelCandidates = $modelCandidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
 

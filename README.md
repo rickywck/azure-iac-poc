@@ -72,6 +72,13 @@ cd C:\Users\ricky\poc\azure-iac
 .\scripts\deploy-app.ps1
 ```
 
+For environments where local Docker is unavailable (for example Cloud Shell), use the ACR-build variant:
+
+```powershell
+cd C:\Users\ricky\poc\azure-iac
+.\scripts\deploy-app-acr.ps1
+```
+
 This flow:
 
 - rebuilds and pushes the current application images
@@ -84,13 +91,25 @@ This flow:
 If you want to use an existing Foundry/OpenAI resource instead of the repo-managed one:
 
 ```powershell
-.\scripts\deploy.ps1 -UseExistingFoundry
+.\scripts\deploy.ps1 -UseExternalFoundry `
+  -ExternalFoundryEndpoint "https://<your-foundry-resource>.openai.azure.com/" `
+  -ExternalFoundryApiKey "<your-foundry-api-key>"
 ```
 
 or
 
 ```powershell
-.\scripts\deploy-app.ps1 -UseExistingFoundry
+.\scripts\deploy-app.ps1 -UseExternalFoundry `
+  -ExternalFoundryEndpoint "https://<your-foundry-resource>.openai.azure.com/" `
+  -ExternalFoundryApiKey "<your-foundry-api-key>"
+```
+
+or
+
+```powershell
+.\scripts\deploy-app-acr.ps1 -UseExternalFoundry `
+  -ExternalFoundryEndpoint "https://<your-foundry-resource>.openai.azure.com/" `
+  -ExternalFoundryApiKey "<your-foundry-api-key>"
 ```
 
 ## Accessing the Azure Application
@@ -192,6 +211,58 @@ docker compose down
 - Local Docker development talks to the Azure PostgreSQL server directly, so successful local startup depends on the `local-dev-client` firewall rule matching your current public IP.
 - `deploy.ps1` is the full environment deployment path.
 - `deploy-app.ps1` is the faster application-only update path.
+- `deploy-app-acr.ps1` is the app-only path that always uses `az acr build` and does not require local Docker.
+
+## POC Learnings For Production Planning
+
+This section captures implementation lessons and precautions from this POC to reuse in the real project.
+
+### Deployment Model
+
+- Keep deployments phased:
+  - infra first
+  - image build and push second
+  - app rollout third
+- Avoid inline dynamic Azure CLI parameters for secrets and booleans. Use temporary parameter override files.
+- Keep app-only deployment separate from full infra deployment.
+
+### Image Build Strategy
+
+- Local development and Azure deployment are separate workflows:
+  - local: `docker compose up --build`
+  - Azure: script-driven push to ACR, then Container App update
+- `az acr build` does not require Docker on the local machine and is preferred for Cloud Shell and CI execution.
+- If running from Cloud Shell, source code must be present in the Cloud Shell filesystem (cloned or uploaded) before running `az acr build`.
+- Keep `.dockerignore` strict so build context uploads stay fast and deterministic.
+
+### Secret and Config Strategy
+
+- PostgreSQL password pattern is stable and should be retained:
+  - generated or reused by deployment automation
+  - stored in Key Vault
+  - resolved by backend at runtime in Azure via managed identity
+- Foundry secret handling currently differs by mode:
+  - repo-managed Foundry: key resolved by template from the managed resource
+  - external Foundry: endpoint and key must be provided explicitly to deployment scripts
+- For long-term consistency, consider moving external Foundry credentials to Key Vault and resolving them with managed identity as well.
+
+### Networking and Local Development
+
+- Agents app is intentionally internal-only. Its internal FQDN is not a browser entry point.
+- Local backend connectivity depends on Azure PostgreSQL firewall alignment with current public IP.
+- Always rerun `scripts/setup-local-env.ps1` after IP changes or after recreating the resource group.
+
+### Azure Platform Precautions
+
+- Foundry/OpenAI naming conflicts can persist after resource group deletion due to soft-delete behavior.
+- Treat operator access and app identity access as separate concerns.
+- Do not assume control-plane admin rights imply Key Vault data-plane secret-read access.
+
+### Script and Tooling Precautions
+
+- Use `-UseExternalFoundry` only when intentionally switching to a different Foundry resource than the repo-managed one.
+- Prefer non-interactive parameters for automation and reproducibility.
+- Validate Bicep and script changes before reruns to avoid long failure loops.
 
 ## Validation and Logs
 
