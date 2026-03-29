@@ -1,27 +1,30 @@
 ---
 name: "CodeQL Security Fixer"
 on:
-  code_scanning_alert:
+  # The agentic engine uses 'security_event' or 'workflow_dispatch' 
+  # for scanning-related triggers
+  security_events:
     types: [created]
 
 permissions:
   contents: read
   pull-requests: write
+  security-events: read
 
 safe-outputs:
   create-pull-request:
     draft: true
-    branch-prefix: "fix/codeql-"
-    labels: ["security", "autofix"]
+    # Remove branch-prefix as it's not supported here
+    # Labels must be in the 'allowed-labels' list if restricted
+    auto-merge: false 
 ---
 
 # CodeQL Security Fixer
-You are a security engineer. A new CodeQL alert has been detected in this repository.
+You are a security engineer. A new CodeQL alert has been detected.
 
 ## Instructions
-1. **Fetch Alert Details:** Use the `${{ github.event.alert.number }}` to get the alert details.
-2. **Analyze Code:** Locate the file `${{ github.event.alert.most_recent_instance.location.path }}` and understand the vulnerability.
-3. **Apply Fix:** Rewrite the code to resolve the security issue without changing the intended logic.
-4. **Verify:** Check if there are any obvious syntax errors in your change.
-5. **Submit PR:** Call the `create-pull-request` tool to submit your fix. 
-   - Body: "Fixes CodeQL Alert #${{ github.event.alert.number }}: ${{ github.event.alert.rule.description }}"
+1. **Fetch Alert:** Use the GitHub toolset to retrieve the details of the alert that triggered this workflow.
+2. **Analyze:** Read the source code at the reported location.
+3. **Fix:** Apply a security patch to the code in your temporary workspace.
+4. **Submit:** Use the `create-pull-request` safe output to propose the fix. 
+   - Ensure the PR description mentions the CodeQL Rule ID.
