@@ -3,7 +3,7 @@ name: "CodeQL Security Fixer"
 on:
   # The agentic engine uses 'security_event' or 'workflow_dispatch' 
   # for scanning-related triggers
-  security_events:
+  security_event:
     types: [created]
 
 permissions:
