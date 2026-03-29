@@ -1,10 +1,12 @@
 ---
 name: "CodeQL Security Fixer"
 on:
-  # The agentic engine uses 'security_event' or 'workflow_dispatch' 
-  # for scanning-related triggers
-  security_event:
-    types: [created]
+  # Using workflow_dispatch allows you to trigger it via the UI 
+  # or via a standard GH Action that calls this agent.
+  workflow_dispatch:
+  # If you want it to run on PRs to check for new alerts:
+  pull_request:
+    types: [opened, synchronize]
 
 permissions:
   contents: read
@@ -14,17 +16,13 @@ permissions:
 safe-outputs:
   create-pull-request:
     draft: true
-    # Remove branch-prefix as it's not supported here
-    # Labels must be in the 'allowed-labels' list if restricted
-    auto-merge: false 
 ---
 
 # CodeQL Security Fixer
-You are a security engineer. A new CodeQL alert has been detected.
+You are a security engineer. Your task is to investigate and fix CodeQL alerts.
 
 ## Instructions
-1. **Fetch Alert:** Use the GitHub toolset to retrieve the details of the alert that triggered this workflow.
-2. **Analyze:** Read the source code at the reported location.
-3. **Fix:** Apply a security patch to the code in your temporary workspace.
-4. **Submit:** Use the `create-pull-request` safe output to propose the fix. 
-   - Ensure the PR description mentions the CodeQL Rule ID.
+1. **Identify Alert:** Use the `list-code-scanning-alerts` tool to find recent open alerts.
+2. **Analyze:** Read the code at the alert location.
+3. **Fix:** Apply the fix to the files in your workspace.
+4. **Submit:** Call the `create-pull-request` tool to propose the fix.
