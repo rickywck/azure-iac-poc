@@ -3,7 +3,6 @@ import asyncio
 import json
 import os
 import re
-import sys
 
 import httpx
 
@@ -246,36 +245,13 @@ class FoundryAgent:
             result = json.dumps(data)
         return str(result).strip(), "dynamic-session"
 
-    async def _execute_with_local_python(self, python_code: str) -> tuple[str, str]:
-        process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-c",
-            python_code,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=20)
-        except asyncio.TimeoutError:
-            process.kill()
-            await process.communicate()
-            raise RuntimeError("Python execution timed out")
-
-        if process.returncode != 0:
-            raise RuntimeError((stderr.decode("utf-8", errors="replace") or "Unknown execution error").strip())
-
-        return stdout.decode("utf-8", errors="replace").strip(), "local-python-fallback"
-
     async def _execute_python_script(self, python_code: str) -> tuple[str, str]:
-        if self.dynamic_session_executor_url:
-            try:
-                return await self._execute_with_dynamic_session(python_code)
-            except Exception:
-                # Keep POC usable when dynamic session endpoint is not yet wired.
-                return await self._execute_with_local_python(python_code)
-
-        return await self._execute_with_local_python(python_code)
+        if not self.dynamic_session_executor_url:
+            raise RuntimeError(
+                "No sandboxed execution backend is configured. "
+                "Set DYNAMIC_SESSION_EXECUTOR_URL to enable Python execution."
+            )
+        return await self._execute_with_dynamic_session(python_code)
 
     async def chat(self, message: str) -> dict:
         """Send message to direct LLM path and optionally a code-execution path for calculations."""
