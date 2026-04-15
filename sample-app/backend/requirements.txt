@@ -4,7 +4,7 @@ sqlalchemy==2.0.38
 asyncpg==0.30.0
 pydantic==2.10.6
 pydantic-settings==2.7.1
-python-multipart==0.0.22
+python-multipart==0.0.26
 python-dotenv==1.0.1
 azure-identity==1.16.1
 azure-keyvault-secrets==4.8.0
